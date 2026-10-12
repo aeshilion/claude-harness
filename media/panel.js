@@ -7,7 +7,7 @@
     detail: undefined,
     draft: undefined,
     filter: saved.filter || '',
-    collapsed: new Set(saved.collapsed || []),
+    expanded: new Set(saved.expanded || []),
   };
   const app = document.getElementById('app');
 
@@ -27,7 +27,7 @@
   const icon = name => el('span', { className: `codicon codicon-${name}` });
   const iconBtn = (name, title, onclick, disabled) => el('button', { className: 'icon-btn', title, 'aria-label': title, onclick, disabled }, icon(name));
 
-  const persist = () => vscode.setState({ filter: state.filter, collapsed: [...state.collapsed], openRepos: [...state.openRepos] });
+  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos] });
   const editable = () => state.detail && (state.detail.mode === 'markdown' || state.detail.mode === 'code');
   const snapshot = d => JSON.stringify({ fields: d.fields, body: d.body });
   const isDirty = () => !!(state.draft && state.detail && snapshot(state.draft) !== snapshot(state.detail));
@@ -54,14 +54,14 @@
       const items = cat.items.filter(a => matches(a, q));
       if (!items.length && (q || nested)) continue;
       const key = `${view.id}|${cat.kind}`;
-      const collapsed = state.collapsed.has(key) && !q;
+      const collapsed = !state.expanded.has(key) && !q;
       list.append(
         el(
           'div',
           {
             className: `section-head${nested ? ' nested' : ''}`,
             onclick: () => {
-              collapsed ? state.collapsed.delete(key) : state.collapsed.add(key);
+              collapsed ? state.expanded.add(key) : state.expanded.delete(key);
               persist();
               render();
             },
@@ -199,7 +199,7 @@
               {
                 className: 'tile',
                 onclick: () => {
-                  state.collapsed.delete(`${global.id}|${c.kind}`);
+                  state.expanded.add(`${global.id}|${c.kind}`);
                   persist();
                   if (c.items[0]) select(c.items[0].id);
                 },
@@ -456,7 +456,7 @@
   window.addEventListener('message', e => {
     const m = e.data;
     if (m.type === 'state') {
-      state.views = m.views;
+      state.views = m.views || (m.categories ? [{ id: 'global', label: 'Global', path: '', categories: m.categories }] : []);
       const scroll = app.querySelector('.list') ? app.querySelector('.list').scrollTop : 0;
       const sidebar = renderSidebar();
       const current = app.querySelector('.sidebar');
@@ -466,6 +466,11 @@
       if (m.external && isDirty()) return;
       if (m.external && m.detail && state.detail && snapshot(m.detail) === snapshot(state.detail) && m.detail.asset.enabled === state.detail.asset.enabled) return;
       state.detail = m.detail;
+      if (m.detail) {
+        state.expanded.add(`${m.detail.asset.scope || 'global'}|${m.detail.asset.kind}`);
+        if (m.detail.asset.scope && m.detail.asset.scope !== 'global') state.openRepos.add(m.detail.asset.scope);
+        persist();
+      }
       state.draft = m.detail ? clone(m.detail) : undefined;
       render();
     }

@@ -15,10 +15,10 @@ git clone https://github.com/alexander-kastil/claude-harness.git
 cd claude-harness
 npm install
 npm run package
-code --install-extension claude-harness-0.1.0.vsix --force
+code --install-extension claude-harness-0.1.1.vsix --force
 ```
 
-You can also install the file from the UI: open the Extensions view, choose the "..." menu, then "Install from VSIX...", and select `claude-harness-0.1.0.vsix`.
+You can also install the file from the UI: open the Extensions view, choose the "..." menu, then "Install from VSIX...", and select `claude-harness-0.1.1.vsix`.
 
 After installing, run "Developer: Reload Window" from the command palette.
 
