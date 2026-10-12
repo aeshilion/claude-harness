@@ -27,6 +27,71 @@
       "industry": "software development tooling",
       "status": "Built and running in-house",
       "catalogue": { "action": "none" }
+    },
+    {
+      "date": "2026-10-12",
+      "from": "09:54",
+      "to": "11:20",
+      "sessionId": "fc94fec6-b5ff-4884-bcad-21f48f67745c",
+      "branch": "main",
+      "commits": [
+        "64f048e"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "src/extension.ts",
+        "src/harness.ts",
+        "src/panel.ts",
+        "src/tools.ts",
+        "src/probe.ts",
+        "media/panel.js",
+        "media/panel.css",
+        "package.json",
+        "README.md",
+        "docs/"
+      ],
+      "mechanism": {
+        "takes": "the agent tool's local configuration (per-user and per-project files) plus the tool's own command-line inventory of connected tool servers",
+        "does": "shows each project's setup on its own page, lets the user add a project folder or a parent folder of projects, picks allowed tools from a checklist in a panel and inline in the text editor, lists every tool server with its source, status and live tool list, and switches servers on or off per project or everywhere by editing the per-project disable lists",
+        "returns": "the configuration files edited in place, with every untouched key byte-identical"
+      },
+      "portsAsIs": [
+        "tool-server inventory merged from config files and the CLI's health-checked list",
+        "live server description and tool list over the standard handshake for reachable servers",
+        "per-project and everywhere on/off switches written surgically into a shared JSON config",
+        "checklist picker for allowed-tool lists that keeps the list's YAML shape",
+        "parent-folder project discovery"
+      ],
+      "perCustomer": [
+        "which configuration kinds and folders exist",
+        "the publisher identity and branding of the extension page"
+      ],
+      "evidence": [
+        "test/unit/harness.test.ts",
+        "tests: 13 unit",
+        "claude mcp list parsed live: 37 servers; Microsoft Learn probed live: 3 tools"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "mcp-claude",
+          "report",
+          "claude-learn",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "docs-agent"
+        ]
+      },
+      "industry": "software development tooling",
+      "status": "Built and running in-house, Marketplace release prepared",
+      "catalogue": {
+        "action": "none"
+      }
     }
   ]
 }
