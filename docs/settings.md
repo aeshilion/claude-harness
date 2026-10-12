@@ -33,6 +33,8 @@ Save checks the JSON first. Invalid JSON shows an error with the parser message,
 
 ![settings.json open in the editable JSON box](images/settings-edit.png)
 
+**Claude Harness: Open Settings File...** lists every settings file, global and per repo, and opens the one you pick. See [Commands](commands.md#open-settings-file).
+
 ---
 
 <table width="100%" border="1" cellpadding="10" cellspacing="0">

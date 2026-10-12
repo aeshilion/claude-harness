@@ -103,7 +103,15 @@ When a server needs sign-in, the page shows **Sign in** and **Retry**.
 
 The header of the server page has a trash button for a server that has an entry in a config file: `.mcp.json` in a repo, or `~/.claude.json` for your own config and for a repo's entry there. Claude Harness asks you to confirm, then removes that entry from the file. Removing the entry can reformat the entries next to it in that file.
 
-claude.ai connectors and plugin servers have no entry in a file, so they have no trash button.
+claude.ai connectors and plugin servers have no entry in a file, so they have no trash button. The same delete is in the sidebar tree's right-click menu.
+
+## Add a server
+
+Click the plus button on the **MCP Servers** header, or run **Claude Harness: Add MCP Server...**. Pick the scope, type a name, then enter a command line or a URL. See [Commands](commands.md#add-mcp-server).
+
+## Copy as a command
+
+The copy button in the server page header, also in the tree's right-click menu, copies a `claude mcp add` line for the server to the clipboard. See [Commands](commands.md#copy-as-claude-mcp-add-command).
 
 ## Add a connector
 

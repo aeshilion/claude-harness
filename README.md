@@ -19,10 +19,11 @@ Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, s
 | [Editing](docs/editing.md) | Edits frontmatter and instructions, saves or reverts, and creates, renames, duplicates or deletes items |
 | [Repositories](docs/repositories.md) | Shows the harness of each repo, and adds or removes repos |
 | [Configure Tools](docs/configure-tools.md) | Picks the tools an agent, skill or command may use |
-| [MCP servers](docs/mcp-servers.md) | Lists MCP servers with their source and status, sorts them and shows their live tools |
+| [MCP servers](docs/mcp-servers.md) | Lists MCP servers with their source and status, sorts them, shows their tools, and adds, copies or deletes them |
 | [MCP switches](docs/mcp-toggles.md) | Turns an MCP server on or off for one repo or in every folder |
-| [Plugins](docs/plugins.md) | Enables or disables installed plugins |
-| [Settings](docs/settings.md) | Sets the global harness folder and the repo lists the extension keeps |
+| [Plugins](docs/plugins.md) | Enables, disables, installs and uninstalls plugins, and marks mods |
+| [Settings](docs/settings.md) | Sets the global harness folder and the repo lists the extension keeps, and edits the settings files |
+| [Commands](docs/commands.md) | Every Claude Harness command, what it does and where to find it |
 
 ## License
 

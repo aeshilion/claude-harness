@@ -27,6 +27,10 @@ The Plugins section lists the plugins in the global harness and in each repo. Yo
 
 The switch sets the plugin's key under `enabledPlugins` in the `settings.json` of that folder, to `true` or `false`. It adds the key when it is missing. No other key changes.
 
+## Install and uninstall
+
+Click the plus button on the **Plugins** header, or run **Claude Harness: Install Plugin...**, to install a plugin from your marketplaces. The trash button on a plugin page, the tree's right-click menu and **Claude Harness: Uninstall Plugin...** uninstall it. Both run the `claude plugin` command in a terminal. See [Commands](commands.md#install-and-uninstall-plugins).
+
 ## Mods
 
 A plugin is a mod when its hooks file declares a `modules` array. The hooks file is `hooks/hooks.json`, or the path that the plugin's `.claude-plugin/plugin.json` sets in its `hooks` key. Claude Harness reads the plugin's files from the global harness folder, for repo plugins too.

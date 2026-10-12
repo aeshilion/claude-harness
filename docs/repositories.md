@@ -35,6 +35,8 @@ The repo page shows the repo name, its path and its asset count. It has these pa
 - **New in** the repo name (plus icon) creates an item in this repo. See [Editing](editing.md#create-rename-duplicate-and-delete).
 - The trash button removes this repo from the harness. Nothing is deleted on disk.
 
+The terminal icon on a repo row in the sidebar opens a terminal in that repo running `claude`. See [Commands](commands.md#open-claude-here).
+
 ## Add a repo
 
 1. Run **Claude Harness: Add Repo...** from the command palette, or click the add button on the **Repositories** header in the sidebar.
