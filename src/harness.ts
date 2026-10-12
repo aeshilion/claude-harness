@@ -129,10 +129,12 @@ const realPath = (p: string) => {
 export function knownRepos(extra: string[], userConfig = path.join(os.homedir(), '.claude.json')): string[] {
   const projects = Object.keys((readJson(userConfig).projects ?? {}) as Record<string, unknown>);
   const seen = new Map<string, string>();
-  for (const candidate of [...projects, ...extra]) {
-    const dir = path.resolve(candidate);
+  const candidates = [...projects.map(p => ({ p, explicit: false })), ...extra.map(p => ({ p, explicit: true }))];
+  for (const { p, explicit } of candidates) {
+    const dir = path.resolve(p);
     const key = process.platform === 'win32' ? dir.toLowerCase() : dir;
-    if (seen.has(key) || path.relative(os.homedir(), dir) === '' || isInside(realPath(dir), realPath(os.tmpdir()))) continue;
+    if (seen.has(key) || path.relative(os.homedir(), dir) === '') continue;
+    if (!explicit && isInside(realPath(dir), realPath(os.tmpdir()))) continue;
     if (!fs.existsSync(path.join(dir, '.claude')) && !fs.existsSync(path.join(dir, 'CLAUDE.md'))) continue;
     seen.set(key, dir.length > 2 && dir[1] === ':' ? dir[0].toUpperCase() + dir.slice(1) : dir);
   }

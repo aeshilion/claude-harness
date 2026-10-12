@@ -2,7 +2,7 @@
   "name": "claude-harness",
   "displayName": "Claude Harness",
   "description": "Visualize and edit the global Claude Code harness in ~/.claude: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "integrations-at",
   "license": "MIT",
   "author": {

@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { createAsset, duplicateAsset, fromFields, globalScope, readMarkdown, renameAsset, repoScope, scan, serializeMarkdown, setPluginEnabled, toFields } from '../../src/harness';
+import { createAsset, duplicateAsset, fromFields, globalScope, knownRepos, readMarkdown, renameAsset, repoScope, scan, serializeMarkdown, setPluginEnabled, toFields } from '../../src/harness';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-'));
@@ -109,4 +109,16 @@ test('repo scope reads project memory, .claude assets and .mcp.json', () => {
   assert.equal(byKind.mcp[0].description, 'stdio · node db.js');
   const file = createAsset(scope, 'skill', 'repo-skill');
   assert.equal(file, path.join(repo, '.claude', 'skills', 'repo-skill', 'SKILL.md'));
+});
+
+test('workspace folders with a local harness are listed even under the temp folder', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'local-'));
+  fs.mkdirSync(path.join(repo, '.claude', 'agents'), { recursive: true });
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'scratch-'));
+  fs.writeFileSync(path.join(scratch, 'CLAUDE.md'), '# x\n');
+  const config = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cfg-')), 'user.json');
+  fs.writeFileSync(config, JSON.stringify({ projects: { [scratch]: {} } }));
+  const repos = knownRepos([repo], config).map(r => r.toLowerCase());
+  assert.ok(repos.includes(path.resolve(repo).toLowerCase()));
+  assert.ok(!repos.includes(path.resolve(scratch).toLowerCase()));
 });

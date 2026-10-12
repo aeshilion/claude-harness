@@ -201,6 +201,12 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.title h1 .tag {
+  flex-shrink: 0;
 }
 
 .title .path {
