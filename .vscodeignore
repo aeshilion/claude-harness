@@ -1,0 +1,13 @@
+.vscode/**
+src/**
+test/**
+out/test/**
+**/*.map
+**/*.ts
+tsconfig.json
+.gitignore
+*.vsix
+node_modules/**
+!node_modules/yaml/**
+!node_modules/jsonc-parser/**
+!node_modules/@vscode/codicons/dist/**
