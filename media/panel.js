@@ -25,6 +25,7 @@
     return node;
   };
   const icon = name => el('span', { className: `codicon codicon-${name}` });
+  const logo = size => (document.body.dataset.logo ? el('img', { className: `logo ${size}`, src: document.body.dataset.logo, alt: '' }) : icon('hubot'));
   const iconBtn = (name, title, onclick, disabled) => el('button', { className: 'icon-btn', title, 'aria-label': title, onclick, disabled }, icon(name));
 
   const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos] });
@@ -159,6 +160,7 @@
       el(
         'div',
         { className: 'sidebar-head' },
+        logo('logo-sm'),
         el('span', {}, 'Global Harness'),
         el('span', { className: 'spacer' }),
         iconBtn('home', 'Overview', () => select(undefined)),
@@ -184,7 +186,7 @@
       el(
         'header',
         { className: 'main-head' },
-        el('span', { className: 'big' }, icon('hubot')),
+        el('span', { className: 'big' }, logo('logo-lg')),
         el('div', { className: 'title' }, el('h1', {}, 'Global Harness'), el('div', { className: 'path' }, `${global ? total(global) : 0} global assets · ${repos.length} repositories`))
       ),
       el(

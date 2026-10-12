@@ -11,3 +11,4 @@ node_modules/**
 !node_modules/yaml/**
 !node_modules/jsonc-parser/**
 !node_modules/@vscode/codicons/dist/**
+.time/**

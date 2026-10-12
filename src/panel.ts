@@ -43,7 +43,7 @@ export class HarnessPanel {
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist')],
     });
-    panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'harness.svg');
+    panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'harness-tab.svg');
     HarnessPanel.current = new HarnessPanel(context, panel, host, id);
   }
 
@@ -156,13 +156,13 @@ export class HarnessPanel {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; img-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${codicons}">
 <link rel="stylesheet" href="${media('panel.css')}">
 <title>Global Harness</title>
 </head>
-<body>
+<body data-logo="${media('harness-tab.svg')}">
 <div id="app"></div>
 <script nonce="${nonce}" src="${media('panel.js')}"></script>
 </body>

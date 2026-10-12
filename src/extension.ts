@@ -83,8 +83,8 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const status = vscode.window.createStatusBarItem('claudeHarness.status', vscode.StatusBarAlignment.Left, 0);
-  status.name = 'Global Harness';
-  status.text = '$(hubot) Global Harness';
+  status.name = 'Claude Harness';
+  status.text = '$(hubot) Claude Harness';
   status.tooltip = 'Open the global Claude harness';
   status.command = 'claudeHarness.open';
   status.show();

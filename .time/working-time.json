@@ -1,0 +1,32 @@
+{
+  "repo": "claude-harness",
+  "origin": "https://github.com/alexander-kastil/claude-harness",
+  "sessions": [
+    {
+      "date": "2026-10-12",
+      "from": "01:35",
+      "to": "02:20",
+      "sessionId": "ccbae7e1-1b2d-4ff2-af90-5f158534bc5d",
+      "branch": "main",
+      "commits": ["42e8bef", "5d469e4", "9c8dfc9"],
+      "surfaces": ["claude-harness"],
+      "files": ["src/harness.ts", "src/extension.ts", "src/panel.ts", "media/panel.js"],
+      "mechanism": {
+        "takes": "a folder of agent configuration files (markdown with YAML frontmatter, JSON settings) on the local machine, plus every project folder the agent tool has been used in",
+        "does": "indexes them by kind and scope, renders them in an editor-side panel with a form for the frontmatter and a text editor for the body, and writes edits back preserving untouched formatting and line endings",
+        "returns": "the same files edited in place, created, renamed, duplicated or moved to the trash"
+      },
+      "portsAsIs": ["frontmatter form editor that keeps unchanged keys byte-identical", "editor-panel layout with searchable sidebar and per-scope sections", "isolated-instance verification over the debugging protocol"],
+      "perCustomer": ["the set of configuration kinds and their folder layout", "where the list of project folders comes from"],
+      "evidence": ["test/unit/harness.test.ts", "tests: 9 unit", "verified in an isolated VS Code instance opened on a repo with a local harness: 27 repositories listed, local agent opened and edited"],
+      "toolchain": {
+        "skills": ["create-issue", "claude-learn", "claude-learn-worktime", "track-time"],
+        "mcpServers": ["chrome-devtools"],
+        "agents": ["docs-agent"]
+      },
+      "industry": "software development tooling",
+      "status": "Built and running in-house",
+      "catalogue": { "action": "none" }
+    }
+  ]
+}

@@ -490,3 +490,17 @@ pre.json {
   align-items: center;
   gap: 4px;
 }
+
+.logo {
+  display: block;
+}
+
+.logo-sm {
+  width: 16px;
+  height: 16px;
+}
+
+.logo-lg {
+  width: 24px;
+  height: 24px;
+}
