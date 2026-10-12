@@ -2,7 +2,7 @@
   "name": "claude-harness",
   "displayName": "Claude Harness",
   "description": "Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.",
-  "version": "0.1.19",
+  "version": "0.1.25",
   "publisher": "integrations-at",
   "license": "CC-BY-NC-SA-4.0",
   "icon": "media/icon.png",
@@ -53,7 +53,8 @@
         "claudeHarness.root": {
           "type": "string",
           "default": "",
-          "description": "Folder of the global harness. Empty means ~/.claude."
+          "markdownDescription": "Folder of the global harness. Empty means `~/.claude`.",
+          "order": 1
         },
         "claudeHarness.repoFolders": {
           "type": "array",
@@ -61,7 +62,8 @@
             "type": "string"
           },
           "default": [],
-          "description": "Folders added with Add Repo. Each is a repo folder or a parent folder whose subfolders are repos. A folder is listed when it has a .claude folder or a CLAUDE.md."
+          "markdownDescription": "Folders added with **Add Repo...**. Each is a repo folder, or a parent folder whose subfolders are repos. A folder is listed when it has a `.claude` folder or a `CLAUDE.md`.",
+          "order": 2
         },
         "claudeHarness.removedRepos": {
           "type": "array",
@@ -69,7 +71,8 @@
             "type": "string"
           },
           "default": [],
-          "description": "Repo folders hidden with Remove Repo. Adding the repo or its parent folder again shows it again."
+          "markdownDescription": "Repo folders hidden with **Remove Repo...**. Adding the repo or its parent folder again shows it again.",
+          "order": 3
         }
       }
     },
@@ -86,7 +89,9 @@
       "claudeHarness": [
         {
           "id": "claudeHarness.tree",
-          "name": "Claude Harness"
+          "name": "Claude Harness",
+          "icon": "media/harness.svg",
+          "contextualTitle": "Claude Harness"
         }
       ]
     },
@@ -161,6 +166,42 @@
         "title": "Enable / Disable Plugin",
         "category": "Claude Harness",
         "icon": "$(circle-large-outline)"
+      },
+      {
+        "command": "claudeHarness.addMcp",
+        "title": "Add MCP Server...",
+        "category": "Claude Harness",
+        "icon": "$(add)"
+      },
+      {
+        "command": "claudeHarness.copyMcpAdd",
+        "title": "Copy as claude mcp add Command",
+        "category": "Claude Harness",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "claudeHarness.openClaude",
+        "title": "Open Claude Here",
+        "category": "Claude Harness",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "claudeHarness.installPlugin",
+        "title": "Install Plugin...",
+        "category": "Claude Harness",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "claudeHarness.uninstallPlugin",
+        "title": "Uninstall Plugin...",
+        "category": "Claude Harness",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "claudeHarness.openSettings",
+        "title": "Open Settings File...",
+        "category": "Claude Harness",
+        "icon": "$(settings-gear)"
       }
     ],
     "menus": {
@@ -179,6 +220,11 @@
           "command": "claudeHarness.refresh",
           "when": "view == claudeHarness.tree",
           "group": "navigation@3"
+        },
+        {
+          "command": "claudeHarness.openClaude",
+          "when": "view == claudeHarness.tree",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -221,6 +267,36 @@
           "command": "claudeHarness.delete",
           "when": "view == claudeHarness.tree && viewItem =~ /^asset[.](agent|skill|command|outputStyle|rule|workflow)$/",
           "group": "3_delete@1"
+        },
+        {
+          "command": "claudeHarness.uninstallPlugin",
+          "when": "view == claudeHarness.tree && viewItem == asset.plugin",
+          "group": "3_delete@1"
+        },
+        {
+          "command": "claudeHarness.delete",
+          "when": "view == claudeHarness.tree && viewItem == asset.mcp.stored",
+          "group": "3_delete@1"
+        },
+        {
+          "command": "claudeHarness.copyMcpAdd",
+          "when": "view == claudeHarness.tree && viewItem =~ /^asset[.]mcp/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "claudeHarness.openSettings",
+          "when": "view == claudeHarness.tree && viewItem == category.settings",
+          "group": "inline@1"
+        },
+        {
+          "command": "claudeHarness.installPlugin",
+          "when": "view == claudeHarness.tree && viewItem == category.plugin",
+          "group": "inline@1"
+        },
+        {
+          "command": "claudeHarness.addMcp",
+          "when": "view == claudeHarness.tree && viewItem == category.mcp",
+          "group": "inline@1"
         }
       ],
       "commandPalette": [
@@ -251,9 +327,19 @@
         {
           "command": "claudeHarness.togglePlugin",
           "when": "false"
+        },
+        {
+          "command": "claudeHarness.copyMcpAdd",
+          "when": "false"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "claudeHarness.tree",
+        "contents": "No Claude harness found yet.\n[Open Claude Harness](command:claudeHarness.open)\n[Add Repo...](command:claudeHarness.addRepo)"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./",

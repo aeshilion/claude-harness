@@ -4,7 +4,14 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   Asset,
+  addMcpServer,
   createAsset,
+  jsonAt,
+  marketplacePlugins,
+  MCP_NAME,
+  McpConfig,
+  mcpAddCommand,
+  splitCommandLine,
   duplicateAsset,
   globalScope,
   HarnessScope,
@@ -16,6 +23,8 @@ import {
   applyMcpState,
   parseMcpList,
   pluginDescription,
+  pluginIsMod,
+  removeJsonEntry,
   setMcpEnabled,
   parseMarkdown,
   renameAsset,
@@ -53,7 +62,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const added = expandRepoFolders(config.get<string[]>('repoFolders') ?? []);
     const removed = config.get<string[]>('removedRepos') ?? [];
     const repos = knownRepos([...folders, ...added]).filter(dir => !removed.some(r => samePath(r, dir)));
-    scopes = [global, ...repos.map(dir => repoScope(dir))];
+    const local = (dir: string) => folders.some(f => samePath(f, dir));
+    scopes = [global, ...[...repos.filter(local), ...repos.filter(dir => !local(dir))].map(dir => repoScope(dir))];
   };
 
   let cliServers: Asset[] = [];
@@ -82,13 +92,15 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
   const refresh = () => {
-    views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, categories: scan(s) }));
+    const folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+    views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, local: s !== global && folders.some(f => samePath(f, s.base)), categories: scan(s) }));
     const globalMcp = views[0].categories.find(c => c.kind === 'mcp');
     if (globalMcp) {
       for (const a of globalMcp.items) a.status = cliServers.find(c => c.name === a.name)?.status;
       globalMcp.items.push(...cliServers.filter(c => !globalMcp.items.some(a => a.name === c.name)).map(c => ({ ...c })));
     }
     applyMcpState(views, global.userConfig);
+    for (const a of views.flatMap(v => v.categories.find(c => c.kind === 'plugin')?.items ?? [])) if (pluginIsMod(global.root, a.name)) a.description += ' · mod';
     tree.setCategories(views[0].categories);
     HarnessPanel.update();
     lensesChanged.fire();
@@ -127,6 +139,28 @@ export function activate(context: vscode.ExtensionContext): void {
       return false;
     }
   };
+
+  const terminal = (name: string, cwd: string, text: string) => {
+    const t = vscode.window.createTerminal({ name, cwd });
+    t.show();
+    t.sendText(text);
+  };
+
+  const cwdOf = (scope: HarnessScope) => (scope.id === global.id ? os.homedir() : scope.base);
+
+  type ScopeItem = vscode.QuickPickItem & { scope: HarnessScope };
+  const pickScope = async (arg: unknown, title: string, globalLabel = 'Global'): Promise<HarnessScope | undefined> => {
+    const given = arg && typeof arg === 'object' && 'scope' in arg ? scopes.find(s => s.id === (arg as { scope?: string }).scope) : undefined;
+    if (given) return given;
+    if (arg && typeof arg === 'object' && 'type' in arg) return global;
+    const items: ScopeItem[] = [
+      ...scopes.filter(s => s.id !== global.id).map(s => ({ label: `$(repo) ${s.label}`, description: s.base, scope: s })),
+      { label: `$(globe) ${globalLabel}`, scope: global },
+    ];
+    return (await vscode.window.showQuickPick(items, { title, matchOnDescription: true }))?.scope;
+  };
+
+  const scopeFlag = (asset: Asset): 'user' | 'project' | 'local' => (asset.source === 'project' ? 'project' : asset.source === 'local' ? 'local' : 'user');
 
   const showFile = (file: string) => {
     const asset = assets().find(a => a.file === file);
@@ -303,11 +337,111 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('claudeHarness.delete', async (arg?: unknown) => {
       const asset = assetOf(arg);
       if (!asset) return;
+      if (asset.kind === 'mcp') {
+        if (!asset.file || !asset.jsonPath) return;
+        const pick = await vscode.window.showWarningMessage(`Delete the MCP server ${asset.name}?`, { modal: true, detail: asset.file }, 'Delete');
+        if (pick === 'Delete') run(() => removeJsonEntry(asset.file, asset.jsonPath!));
+        return;
+      }
       const target = asset.dir ?? asset.file;
       const choice = await vscode.window.showWarningMessage(`Move ${asset.name} to the trash?`, { modal: true, detail: target }, 'Move to Trash');
       if (choice !== 'Move to Trash') return;
       await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: true, useTrash: true });
       refresh();
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.addMcp', async (arg?: unknown) => {
+      const scope = await pickScope(arg, 'Add the MCP server to');
+      if (!scope) return;
+      const name = await vscode.window.showInputBox({
+        prompt: `Name of the new MCP server in ${scope.label}`,
+        validateInput: v => (MCP_NAME.test(v) ? undefined : 'Letters, digits, dots, dashes and underscores; starts with a letter or digit.'),
+      });
+      if (!name) return;
+      const kind = await vscode.window.showQuickPick(
+        [
+          { label: '$(terminal) Local command', stdio: true },
+          { label: '$(globe) HTTP URL', stdio: false },
+        ],
+        { title: `How does Claude reach ${name}?` }
+      );
+      if (!kind) return;
+      const value = await vscode.window.showInputBox(
+        kind.stdio
+          ? { prompt: 'Command line', placeHolder: 'npx -y @example/mcp-server', validateInput: v => (v.trim() ? undefined : 'Enter a command.') }
+          : { prompt: 'URL', placeHolder: 'https://example.com/mcp', validateInput: v => (/^https?:\/\//.test(v.trim()) ? undefined : 'Starts with http:// or https://') }
+      );
+      if (!value) return;
+      const [command, ...args] = splitCommandLine(value.trim());
+      const server: McpConfig = kind.stdio ? { type: 'stdio', command, args, env: {} } : { type: 'http', url: value.trim() };
+      if (!run(() => addMcpServer(scope.mcpFile, name, server))) return;
+      const added = assets().find(a => a.kind === 'mcp' && a.scope === scope.id && a.name === name);
+      if (added) HarnessPanel.show(context, host, added.id);
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.copyMcpAdd', async (arg?: unknown) => {
+      const asset = assetOf(arg);
+      if (asset?.kind !== 'mcp') return;
+      if (asset.source === 'claude.ai' || asset.source === 'plugin') {
+        void vscode.window.showInformationMessage(`${asset.name} comes from ${asset.source === 'plugin' ? 'a plugin' : 'claude.ai'}, so there is no claude mcp add command for it.`);
+        return;
+      }
+      let config: McpConfig;
+      if (asset.file && asset.jsonPath) config = (jsonAt(asset.file, asset.jsonPath) ?? {}) as McpConfig;
+      else if (/^https?:\/\//.test(asset.target ?? '')) config = { type: 'http', url: asset.target };
+      else {
+        const [command, ...args] = splitCommandLine(asset.target ?? '');
+        config = { command, args };
+      }
+      const text = mcpAddCommand(asset.name, config, scopeFlag(asset));
+      await vscode.env.clipboard.writeText(text);
+      vscode.window.setStatusBarMessage(`$(check) Copied: ${text}`, 4000);
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.openClaude', async (arg?: unknown) => {
+      const scope = await pickScope(arg, 'Open Claude in', 'Home folder');
+      if (scope) terminal(`Claude: ${scope.id === global.id ? 'home' : scope.label}`, cwdOf(scope), 'claude');
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.installPlugin', async (arg?: unknown) => {
+      const installed = new Set(views.flatMap(v => v.categories.find(c => c.kind === 'plugin')?.items ?? []).map(a => a.name));
+      const items = marketplacePlugins(global.root)
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map(p => ({ label: p.key, description: installed.has(p.key) ? 'installed' : '', detail: p.description }));
+      if (!items.length) {
+        void vscode.window.showInformationMessage('No marketplace catalog found. Add one with claude plugin marketplace add first.');
+        return;
+      }
+      const plugin = await vscode.window.showQuickPick(items, { title: 'Install a plugin', matchOnDescription: true, matchOnDetail: true });
+      if (!plugin) return;
+      const scope = await pickScope(arg, `Install ${plugin.label} for`, 'You, in every folder');
+      if (!scope) return;
+      terminal(`Install ${plugin.label}`, cwdOf(scope), `claude plugin install ${plugin.label} --scope ${scope.id === global.id ? 'user' : 'project'}`);
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.uninstallPlugin', async (arg?: unknown) => {
+      let asset = assetOf(arg);
+      if (asset?.kind !== 'plugin') {
+        const items = views.flatMap(v => (v.categories.find(c => c.kind === 'plugin')?.items ?? []).map(a => ({ label: a.name, description: v.label, detail: a.description, asset: a })));
+        asset = (await vscode.window.showQuickPick(items, { title: 'Uninstall a plugin', matchOnDescription: true }))?.asset;
+      }
+      if (!asset) return;
+      const scope = scopeOf(asset);
+      const pick = await vscode.window.showWarningMessage(`Uninstall ${asset.name} from ${scope.id === global.id ? 'your user scope' : scope.label}?`, { modal: true }, 'Uninstall');
+      if (pick !== 'Uninstall') return;
+      terminal(`Uninstall ${asset.name}`, cwdOf(scope), `claude plugin uninstall ${asset.name} --scope ${scope.id === global.id ? 'user' : 'project'}`);
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.openSettings', async () => {
+      const items = views.flatMap(v =>
+        (v.categories.find(c => c.kind === 'settings')?.items ?? []).map(a => ({ label: `$(settings-gear) ${a.name}`, description: v.label, detail: a.file, asset: a }))
+      );
+      if (!items.length) {
+        void vscode.window.showInformationMessage('No settings.json or settings.local.json found.');
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(items, { title: 'Open a settings file', matchOnDescription: true, matchOnDetail: true });
+      if (pick) HarnessPanel.show(context, host, pick.asset.id);
     }),
 
     vscode.commands.registerCommand('claudeHarness.toggleMcp', (arg?: unknown) => {

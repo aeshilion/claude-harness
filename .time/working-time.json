@@ -8,25 +8,58 @@
       "to": "02:20",
       "sessionId": "ccbae7e1-1b2d-4ff2-af90-5f158534bc5d",
       "branch": "main",
-      "commits": ["42e8bef", "5d469e4", "9c8dfc9"],
-      "surfaces": ["claude-harness"],
-      "files": ["src/harness.ts", "src/extension.ts", "src/panel.ts", "media/panel.js"],
+      "commits": [
+        "42e8bef",
+        "5d469e4",
+        "9c8dfc9"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "src/harness.ts",
+        "src/extension.ts",
+        "src/panel.ts",
+        "media/panel.js"
+      ],
       "mechanism": {
         "takes": "a folder of agent configuration files (markdown with YAML frontmatter, JSON settings) on the local machine, plus every project folder the agent tool has been used in",
         "does": "indexes them by kind and scope, renders them in an editor-side panel with a form for the frontmatter and a text editor for the body, and writes edits back preserving untouched formatting and line endings",
         "returns": "the same files edited in place, created, renamed, duplicated or moved to the trash"
       },
-      "portsAsIs": ["frontmatter form editor that keeps unchanged keys byte-identical", "editor-panel layout with searchable sidebar and per-scope sections", "isolated-instance verification over the debugging protocol"],
-      "perCustomer": ["the set of configuration kinds and their folder layout", "where the list of project folders comes from"],
-      "evidence": ["test/unit/harness.test.ts", "tests: 9 unit", "verified in an isolated VS Code instance opened on a repo with a local harness: 27 repositories listed, local agent opened and edited"],
+      "portsAsIs": [
+        "frontmatter form editor that keeps unchanged keys byte-identical",
+        "editor-panel layout with searchable sidebar and per-scope sections",
+        "isolated-instance verification over the debugging protocol"
+      ],
+      "perCustomer": [
+        "the set of configuration kinds and their folder layout",
+        "where the list of project folders comes from"
+      ],
+      "evidence": [
+        "test/unit/harness.test.ts",
+        "tests: 9 unit",
+        "verified in an isolated VS Code instance opened on a repo with a local harness: 27 repositories listed, local agent opened and edited"
+      ],
       "toolchain": {
-        "skills": ["create-issue", "claude-learn", "claude-learn-worktime", "track-time"],
-        "mcpServers": ["chrome-devtools"],
-        "agents": ["docs-agent"]
+        "skills": [
+          "create-issue",
+          "claude-learn",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [
+          "chrome-devtools"
+        ],
+        "agents": [
+          "docs-agent"
+        ]
       },
       "industry": "software development tooling",
       "status": "Built and running in-house",
-      "catalogue": { "action": "none" }
+      "catalogue": {
+        "action": "none"
+      }
     },
     {
       "date": "2026-10-12",
@@ -89,6 +122,62 @@
       },
       "industry": "software development tooling",
       "status": "Built and running in-house, Marketplace release prepared",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-12",
+      "from": "11:09",
+      "to": "11:33",
+      "sessionId": "e1b3db5a-0500-4f40-8d05-d96d8b800bea",
+      "branch": "master",
+      "commits": [
+        "7c8e9ef",
+        "44961a1",
+        "fffcf3d"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "azure-pipelines.yml"
+      ],
+      "mechanism": {
+        "takes": "a VS Code extension repository and a Marketplace publisher the owner controls",
+        "does": "federates an Azure DevOps service connection to a managed identity that holds only read access in Azure and contributor rights on the publisher, then runs a manual pipeline that packages the extension and publishes it only when a parameter is switched on",
+        "returns": "a packaged extension per run and, on request, a Marketplace release, with no long-lived token anywhere"
+      },
+      "portsAsIs": [
+        "the federated service connection and identity setup",
+        "the package-by-default, publish-on-parameter pipeline",
+        "the undo list per created item"
+      ],
+      "perCustomer": [
+        "tenant, subscription and organization",
+        "publisher id",
+        "repository host"
+      ],
+      "evidence": [
+        "pipeline run 311: package step succeeded, 284 files, 505.66 KB",
+        "identity dry run: rg=exists identity=exists reader=exists credential=exists create=0",
+        "GitHub issue #2 tracks the first publish"
+      ],
+      "toolchain": {
+        "skills": [
+          "claude-in-chrome",
+          "create-issue",
+          "learn-loop-plugin:claude-learn",
+          "learn-loop-worktime-plugin:claude-learn-worktime",
+          "publish-vscode-ext"
+        ],
+        "mcpServers": [
+          "claude-in-chrome"
+        ],
+        "agents": []
+      },
+      "industry": "software vendors publishing developer tools",
+      "status": "Built and running in-house",
       "catalogue": {
         "action": "none"
       }

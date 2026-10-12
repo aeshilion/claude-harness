@@ -20,6 +20,19 @@ Changing `claudeHarness.root` reloads the global harness from the new folder, an
 
 See [Repositories](repositories.md) for how the two repo lists are used.
 
+## Edit settings files
+
+The **Settings** category lists `settings.json` and `settings.local.json` for the global harness and for each repo, when the file exists. Click a file to open it in an editable JSON box.
+
+| Action | How |
+| --- | --- |
+| Save | Click **Save**, or press Ctrl+S. Save is available only when the text has changed. |
+| Revert | Click **Revert** to drop your changes |
+
+Save checks the JSON first. Invalid JSON shows an error with the parser message, and the file stays unchanged. The file keeps its line endings, whether they are CRLF or LF.
+
+![settings.json open in the editable JSON box](images/settings-edit.png)
+
 ---
 
 <table width="100%" border="1" cellpadding="10" cellspacing="0">

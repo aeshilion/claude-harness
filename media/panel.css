@@ -461,6 +461,11 @@ pre.json {
   cursor: pointer;
 }
 
+.repo-separator {
+  margin: 4px 8px;
+  border-top: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border));
+}
+
 .repo-head:hover {
   background: var(--vscode-list-hoverBackground);
 }
@@ -578,7 +583,7 @@ select.sort {
 .tool-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
 .tool {

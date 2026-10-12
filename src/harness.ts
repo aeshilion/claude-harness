@@ -104,6 +104,7 @@ export interface ScopeView {
   id: string;
   label: string;
   path: string;
+  local?: boolean;
   categories: Category[];
 }
 
@@ -188,6 +189,19 @@ export function pluginDescription(root: string, plugin: string): string {
     if (typeof description === 'string' && description) return description;
   }
   return '';
+}
+
+export function pluginIsMod(root: string, key: string): boolean {
+  const [plugin, market] = key.split('@');
+  const installed = (readJson(path.join(root, 'plugins', 'installed_plugins.json')).plugins ?? {}) as Record<string, Array<{ installPath?: string }>>;
+  const dirs = (installed[key] ?? []).map(e => e.installPath).filter((d): d is string => !!d);
+  const cache = path.join(root, 'plugins', 'cache', market ?? '', plugin);
+  if (!dirs.length && market) dirs.push(...safeDirs(cache).map(v => path.join(cache, v)));
+  return dirs.some(dir => {
+    const hooks = readJson(path.join(dir, '.claude-plugin', 'plugin.json')).hooks;
+    const file = path.join(dir, typeof hooks === 'string' ? hooks : path.join('hooks', 'hooks.json'));
+    return Array.isArray(readJson(file).modules);
+  });
 }
 
 function safeDirs(dir: string): string[] {
@@ -547,6 +561,58 @@ export function setPluginEnabled(scope: HarnessScope, key: string, value: boolea
   const file = path.join(scope.root, 'settings.json');
   const text = fs.existsSync(file) ? readText(file) : '{}';
   const edits = modify(text, ['enabledPlugins', key], value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: eolOf(text) } });
+  fs.writeFileSync(file, applyEdits(text, edits), 'utf8');
+}
+
+export function mcpToken(root: string, name: string, url: string): string | undefined {
+  type Entry = { serverName?: string; serverUrl?: string; accessToken?: string; expiresAt?: number };
+  const entries = Object.values((readJson(path.join(root, '.credentials.json')).mcpOAuth ?? {}) as Record<string, Entry>);
+  const norm = (u = '') => u.replace(/\/+$/, '').toLowerCase();
+  const matches = entries.filter(e => e.accessToken && norm(e.serverUrl) === norm(url));
+  const fresh = (e: Entry) => !e.expiresAt || e.expiresAt > Date.now();
+  return (matches.find(e => e.serverName === name && fresh(e)) ?? matches.find(fresh) ?? matches[0])?.accessToken;
+}
+
+export type McpConfig = { type?: string; command?: string; args?: string[]; env?: Record<string, string>; url?: string; headers?: Record<string, string> };
+
+export const MCP_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function jsonAt(file: string, jsonPath: (string | number)[]): unknown {
+  return jsonPath.reduce<unknown>((node, key) => (node as Record<string | number, unknown> | undefined)?.[key], readJson(file));
+}
+
+export function splitCommandLine(line: string): string[] {
+  return [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2] ?? m[3]);
+}
+
+export function addMcpServer(file: string, name: string, server: McpConfig): void {
+  const text = fs.existsSync(file) ? readText(file) : '{}';
+  if (((readJson(file).mcpServers ?? {}) as Record<string, unknown>)[name]) throw new Error(`An MCP server named ${name} already exists in ${file}.`);
+  const edits = modify(text, ['mcpServers', name], server, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: eolOf(text) } });
+  fs.writeFileSync(file, applyEdits(text, edits), 'utf8');
+}
+
+export function mcpAddCommand(name: string, config: McpConfig, scope: 'user' | 'project' | 'local'): string {
+  const q = (s: string) => (/^[\w@%+=:,./\-]+$/.test(s) ? s : `"${s.replace(/"/g, '\\"')}"`);
+  if (config.url) {
+    const transport = config.type === 'sse' ? 'sse' : 'http';
+    return ['claude', 'mcp', 'add', '--scope', scope, '--transport', transport, q(name), q(config.url), ...Object.entries(config.headers ?? {}).flatMap(([k, v]) => ['--header', q(`${k}: ${v}`)])].join(' ');
+  }
+  const env = Object.entries(config.env ?? {}).flatMap(([k, v]) => ['-e', q(`${k}=${v}`)]);
+  return ['claude', 'mcp', 'add', '--scope', scope, q(name), ...env, '--', ...[config.command ?? '', ...(config.args ?? [])].map(q)].join(' ');
+}
+
+export function marketplacePlugins(root: string): { key: string; description: string }[] {
+  const markets = readJson(path.join(root, 'plugins', 'known_marketplaces.json')) as Record<string, { installLocation?: string }>;
+  return Object.entries(markets).flatMap(([market, m]) => {
+    const plugins = (readJson(path.join(m.installLocation ?? path.join(root, 'plugins', 'marketplaces', market), '.claude-plugin', 'marketplace.json')).plugins ?? []) as { name?: string; description?: string }[];
+    return plugins.filter(p => p.name).map(p => ({ key: `${p.name}@${market}`, description: p.description ?? '' }));
+  });
+}
+
+export function removeJsonEntry(file: string, jsonPath: (string | number)[]): void {
+  const text = readText(file);
+  const edits = modify(text, jsonPath, undefined, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: eolOf(text) } });
   fs.writeFileSync(file, applyEdits(text, edits), 'utf8');
 }
 

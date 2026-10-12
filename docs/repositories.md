@@ -22,6 +22,10 @@ A folder counts as a repo when it has a `.claude` folder or a `CLAUDE.md` file. 
 
 A subfolder that you create later under an added parent folder appears after you click **Refresh** or reload the window.
 
+Repos that are open as workspace folders are listed first under **Repositories**. The other repos follow in alphabetical order by folder name. When both kinds are present, a thin line separates them.
+
+![Sidebar with the open repo on top and a separator line below it](images/repositories.png)
+
 ## Repository page
 
 The repo page shows the repo name, its path and its asset count. It has these parts:

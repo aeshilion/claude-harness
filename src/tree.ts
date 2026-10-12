@@ -50,7 +50,7 @@ export class HarnessTree implements vscode.TreeDataProvider<Node> {
       item.id = `category:${category.kind}`;
       item.description = String(category.items.length);
       item.iconPath = new vscode.ThemeIcon(category.icon);
-      item.contextValue = category.creatable ? 'category.creatable' : 'category';
+      item.contextValue = category.creatable ? 'category.creatable' : `category.${category.kind}`;
       return item;
     }
     if (node.type === 'asset') {
@@ -63,7 +63,7 @@ export class HarnessTree implements vscode.TreeDataProvider<Node> {
         asset.kind === 'plugin'
           ? new vscode.ThemeIcon(asset.enabled ? 'pass-filled' : 'circle-large-outline', asset.enabled ? new vscode.ThemeColor('testing.iconPassed') : undefined)
           : new vscode.ThemeIcon(this.categories.find(c => c.kind === asset.kind)?.icon ?? 'file');
-      item.contextValue = `asset.${asset.kind}`;
+      item.contextValue = asset.kind === 'mcp' && asset.file && asset.jsonPath ? 'asset.mcp.stored' : `asset.${asset.kind}`;
       item.command = { command: 'claudeHarness.open', title: 'Open', arguments: [asset.id] };
       return item;
     }

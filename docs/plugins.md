@@ -27,6 +27,14 @@ The Plugins section lists the plugins in the global harness and in each repo. Yo
 
 The switch sets the plugin's key under `enabledPlugins` in the `settings.json` of that folder, to `true` or `false`. It adds the key when it is missing. No other key changes.
 
+## Mods
+
+A plugin is a mod when its hooks file declares a `modules` array. The hooks file is `hooks/hooks.json`, or the path that the plugin's `.claude-plugin/plugin.json` sets in its `hooks` key. Claude Harness reads the plugin's files from the global harness folder, for repo plugins too.
+
+A mod gets ` · mod` after its description, for example `enabled · 0.2.0 · mod`. The mark shows in the plugin lists and on the plugin page.
+
+![Plugin list with a plugin marked as a mod](images/plugin-mod.png)
+
 ---
 
 <table width="100%" border="1" cellpadding="10" cellspacing="0">

@@ -15,7 +15,8 @@ The MCP Servers section lists the servers in the global harness and in each repo
 | [Where the servers come from](#where-the-servers-come-from) | The five sources and the list they appear in |
 | [Sort the list](#sort-the-list) | Sort by name, source or status |
 | [Server details](#server-details) | The facts and config shown for a server |
-| [Live tools](#live-tools) | Tools read from servers reachable over HTTP |
+| [Tools](#tools) | Tool names read from the server, the messages shown when a server does not answer, and sign-in |
+| [Delete a server](#delete-a-server) | Remove a server's entry from its config file |
 | [Add a connector](#add-a-connector) | The button that opens claude.ai connectors |
 
 ## Where the servers come from
@@ -51,16 +52,58 @@ Click a server to open its detail view. It shows:
 - The switch for the server. See [MCP switches](mcp-toggles.md).
 - A **Config** excerpt of the server's entry, for servers defined in a config file.
 
-## Live tools
+## Tools
 
-For a server with an `http://` or `https://` address, the detail view connects to the address, reads the server name and version, and lists its tools with their descriptions. Headers from the server's config entry are sent with these requests. Opening the detail view therefore makes a request to that address.
+The detail view asks the server for its tools and lists their names under **Tools**, with the count. The **Config** block stays below the list. The panel asks each server once per panel session. **Retry** asks again.
+
+![Stdio server page with the tool names and the Config block below](images/mcp-server-tools.png)
+
+### Local commands
+
+For a server that runs as a local command, Claude Harness starts the command briefly to read its tools:
+
+- It runs from the repo folder for a repo server, or from your home folder for a global server.
+- It runs once per panel session. It stops as soon as the tools are read.
+- It waits up to 60 seconds for an answer.
+- `${VAR}` and `${VAR:-default}` in `command`, `args` and `env` are expanded. An unset `${VAR}` becomes an empty string, and `${VAR:-default}` uses the default when the variable is not set.
+
+### HTTP servers
+
+For a server with an `http://` or `https://` address, the detail view connects to the address and reads its tools. Headers from the server's config entry are sent with these requests. Opening the detail view therefore makes a request to that address.
+
+When the config sets no `Authorization` header, the panel sends the sign-in token that Claude Code stored for that server URL. The token comes from the `mcpOAuth` entries in `.credentials.json` in the global harness folder (`~/.claude` unless you set `claudeHarness.root`). The panel matches the URL and prefers a token for the same server name that has not expired.
+
+### Messages
 
 | Message | Meaning |
 | --- | --- |
 | Asking the server for its tools... | The request is running |
 | The server did not answer within 10 seconds. | The address did not answer in time |
-| Needs sign-in, so only Claude can read its tools. | The server answered with 401 or 403 |
-| Runs as a local command, so its tools are known only once Claude starts it. | The server is a local command. Claude Harness does not start it. |
+| The server did not answer within 60 seconds. | The local command did not list its tools in time |
+| Needs sign-in. | The server answered 401 or 403. Only HTTP servers get this message. |
+| The server answered 404 Not Found. | The address answered with another error status |
+| Could not start it: ... | The local command could not be started |
+| It exited with code N before listing its tools. | The local command stopped early. The last lines of its error output follow the message. |
+| Its config names neither a URL nor a command. | The entry has no address and no command |
+
+Every error message comes with a **Retry** button.
+
+### Sign in
+
+When a server needs sign-in, the page shows **Sign in** and **Retry**.
+
+| Button | What it does |
+| --- | --- |
+| Sign in | For a claude.ai connector, opens the connectors page on claude.ai in your browser. For any other server, opens a VS Code terminal in the repo folder or your home folder and runs `claude "/mcp"`. Pick the server there and sign in. |
+| Retry | Asks the server for its tools again |
+
+![Server showing Needs sign-in. with the Sign in and Retry buttons](images/mcp-sign-in.png)
+
+## Delete a server
+
+The header of the server page has a trash button for a server that has an entry in a config file: `.mcp.json` in a repo, or `~/.claude.json` for your own config and for a repo's entry there. Claude Harness asks you to confirm, then removes that entry from the file. Removing the entry can reformat the entries next to it in that file.
+
+claude.ai connectors and plugin servers have no entry in a file, so they have no trash button.
 
 ## Add a connector
 

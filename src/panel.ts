@@ -1,12 +1,13 @@
 import * as crypto from 'crypto';
+import * as os from 'os';
 import * as vscode from 'vscode';
-import { Asset, Field, ScopeView, fromFields, kindInfo, readMarkdown, readText, toFields, writeMarkdown, writeText } from './harness';
-import { McpInfo, probeHttp } from './probe';
+import { Asset, Field, ScopeView, fromFields, globalScope, kindInfo, mcpToken, readMarkdown, readText, toFields, writeMarkdown, writeText } from './harness';
+import { McpInfo, StdioConfig, probeHttp, probeStdio } from './probe';
 import { pickTools, splitTools } from './tools';
 
 export interface Detail {
   asset: Asset;
-  mode: 'markdown' | 'code' | 'json' | 'plugin' | 'mcp';
+  mode: 'markdown' | 'code' | 'settings' | 'json' | 'plugin' | 'mcp';
   fields: Field[];
   knownFields: string[];
   body: string;
@@ -32,6 +33,8 @@ type Message =
   | { type: 'select'; id?: string; pending?: Pending }
   | { type: 'save'; pending: Pending }
   | { type: 'configureTools'; id: string; key: string; value: string }
+  | { type: 'mcpSignIn'; id: string }
+  | { type: 'mcpRetry'; id: string }
   | { type: 'command'; command: string; id?: string; kind?: string; scope?: string; rel?: string };
 
 export interface PanelHost {
@@ -99,6 +102,7 @@ export class HarnessPanel {
       return { asset, mode: 'markdown', fields: colorBelowTools(toFields(doc.data)), knownFields: info.fields, body: doc.body };
     }
     if (asset.kind === 'workflow') return { asset, mode: 'code', fields: [], knownFields: [], body: readText(asset.file) };
+    if (asset.kind === 'settings') return { asset, mode: 'settings', fields: [], knownFields: [], body: readText(asset.file) };
     if (asset.kind === 'plugin') return { asset, mode: 'plugin', fields: [], knownFields: [], body: '' };
     if (asset.kind === 'mcp') {
       void this.probe(asset);
@@ -111,24 +115,48 @@ export class HarnessPanel {
 
   private async probe(asset: Asset): Promise<void> {
     if (!this.probes.has(asset.id)) {
-      let url = asset.target ?? '';
-      let headers: Record<string, string> = {};
+      let config: { url?: string; headers?: Record<string, string> } & Partial<StdioConfig> = {};
       if (asset.file) {
         try {
-          const config = JSON.parse(this.jsonExcerpt(asset)) as { url?: string; headers?: Record<string, string> };
-          url = config.url ?? '';
-          headers = config.headers ?? {};
+          config = JSON.parse(this.jsonExcerpt(asset));
         } catch {
-          url = '';
+          config = {};
         }
+      } else if (/^https?:\/\//.test(asset.target ?? '')) config = { url: asset.target };
+      else if (asset.target) {
+        const [command, ...args] = asset.target.split(/\s+/);
+        config = { command, args };
       }
+      const view = this.host.views().find(v => v.id === asset.scope);
+      const cwd = asset.scope !== 'global' && view?.path ? view.path : os.homedir();
       this.probes.set(
         asset.id,
-        /^https?:\/\//.test(url) ? probeHttp(url, headers) : Promise.resolve({ error: 'Runs as a local command, so its tools are known only once Claude starts it.' })
+        config.url && /^https?:\/\//.test(config.url)
+          ? probeHttp(config.url, this.withToken(asset, config.url, config.headers ?? {}))
+          : config.command
+            ? probeStdio({ command: config.command, args: config.args, env: config.env }, cwd)
+            : Promise.resolve({ error: 'Its config names neither a URL nor a command.' })
       );
     }
     const info = await this.probes.get(asset.id)!;
     this.post({ type: 'mcpInfo', id: asset.id, info });
+  }
+
+  private withToken(asset: Asset, url: string, headers: Record<string, string>): Record<string, string> {
+    if (Object.keys(headers).some(h => h.toLowerCase() === 'authorization')) return headers;
+    const token = mcpToken(globalScope().root, asset.name, url);
+    return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+  }
+
+  private signIn(asset: Asset): void {
+    if (asset.source === 'claude.ai') {
+      void vscode.env.openExternal(vscode.Uri.parse('https://claude.ai/new#customize/connectors/yours'));
+      return;
+    }
+    const view = this.host.views().find(v => v.id === asset.scope);
+    const terminal = vscode.window.createTerminal({ name: `Sign in: ${asset.name}`, cwd: asset.scope !== 'global' && view?.path ? view.path : os.homedir() });
+    terminal.show();
+    terminal.sendText('claude "/mcp"');
   }
 
   private jsonExcerpt(asset: Asset): string {
@@ -147,6 +175,10 @@ export class HarnessPanel {
     try {
       if (kindInfo(asset.kind).markdown) writeMarkdown(asset.file, fromFields(pending.fields), pending.body);
       else if (asset.kind === 'workflow') writeText(asset.file, pending.body);
+      else if (asset.kind === 'settings') {
+        JSON.parse(pending.body);
+        writeText(asset.file, pending.body);
+      }
       else return false;
       this.host.refresh();
       vscode.window.setStatusBarMessage(`$(check) Saved ${asset.name}`, 2500);
@@ -176,6 +208,19 @@ export class HarnessPanel {
       case 'save':
         if (this.save(m.pending)) this.post({ type: 'detail', detail: this.detail(m.pending.id) });
         return;
+      case 'mcpSignIn': {
+        const asset = this.host.find(m.id);
+        if (asset) this.signIn(asset);
+        return;
+      }
+      case 'mcpRetry': {
+        const asset = this.host.find(m.id);
+        if (!asset) return;
+        this.probes.delete(asset.id);
+        this.post({ type: 'mcpInfo', id: asset.id, info: undefined });
+        void this.probe(asset);
+        return;
+      }
       case 'configureTools': {
         const tools = await pickTools(this.host.views(), this.host.find(m.id), splitTools(m.value));
         if (tools) this.post({ type: 'tools', id: m.id, key: m.key, value: tools.join(', ') });
@@ -187,7 +232,7 @@ export class HarnessPanel {
           if (asset?.dir) await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(vscode.Uri.file(asset.dir), ...m.rel.split('/')));
           return;
         }
-        await vscode.commands.executeCommand(`claudeHarness.${m.command}`, m.id ?? (m.command === 'create' ? { kind: m.kind, scope: m.scope } : undefined));
+        await vscode.commands.executeCommand(`claudeHarness.${m.command}`, m.id ?? (m.kind || m.scope ? { kind: m.kind, scope: m.scope } : undefined));
         return;
     }
   }

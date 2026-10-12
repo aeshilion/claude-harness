@@ -51,7 +51,7 @@
     source: (a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source) || byLabel(a, b),
     status: (a, b) => statusRank(a) - statusRank(b) || byLabel(a, b),
   };
-  const editable = () => state.detail && (state.detail.mode === 'markdown' || state.detail.mode === 'code');
+  const editable = () => state.detail && ['markdown', 'code', 'settings'].includes(state.detail.mode);
   const snapshot = d => JSON.stringify({ fields: d.fields, body: d.body });
   const isDirty = () => !!(state.draft && state.detail && snapshot(state.draft) !== snapshot(state.detail));
   const pending = () => (isDirty() ? { id: state.detail.asset.id, fields: state.draft.fields, body: state.draft.body } : undefined);
@@ -120,6 +120,12 @@
                 command('openConnectors');
               })
             : null,
+          cat.kind === 'mcp' || cat.kind === 'plugin'
+            ? iconBtn('add', cat.kind === 'mcp' ? 'Add MCP Server...' : 'Install Plugin...', e => {
+                e.stopPropagation();
+                command(cat.kind === 'mcp' ? 'addMcp' : 'installPlugin', { scope: view.id });
+              })
+            : null,
           cat.creatable
             ? iconBtn('add', `New ${cat.label}`, e => {
                 e.stopPropagation();
@@ -173,7 +179,8 @@
         el('span', { className: 'count' }, visibleRepos.length)
       )
     );
-    for (const view of visibleRepos) {
+    visibleRepos.forEach((view, i) => {
+      if (i > 0 && visibleRepos[i - 1].local && !view.local) list.append(el('div', { className: 'repo-separator' }));
       const open = state.openRepos.has(view.id) || !!q;
       const count = q ? view.categories.reduce((n, c) => n + c.items.filter(a => matches(a, q)).length, 0) : total(view);
       list.append(
@@ -191,6 +198,10 @@
           icon(open ? 'chevron-down' : 'chevron-right'),
           icon('repo'),
           el('span', { className: 'label' }, view.label),
+          iconBtn('terminal', `Open Claude in ${view.label}`, e => {
+            e.stopPropagation();
+            command('openClaude', { scope: view.id });
+          }),
           iconBtn('add', `New in ${view.label}`, e => {
             e.stopPropagation();
             command('create', { scope: view.id });
@@ -199,7 +210,7 @@
         )
       );
       if (open) renderCategories(list, view, q, true);
-    }
+    });
     const search = el('input', {
       type: 'search',
       placeholder: 'Search the harness',
@@ -492,11 +503,13 @@
       el(
         'div',
         { className: 'toolbar' },
+        d.asset.kind === 'mcp' && d.asset.source !== 'claude.ai' && d.asset.source !== 'plugin' ? iconBtn('copy', 'Copy as claude mcp add command', () => command('copyMcpAdd', { id: d.asset.id })) : null,
         canRename ? iconBtn('edit', 'Rename', () => command('rename', { id: d.asset.id })) : null,
         canRename ? iconBtn('copy', 'Duplicate', () => command('duplicate', { id: d.asset.id })) : null,
         iconBtn('go-to-file', 'Open in editor', () => command('openFile', { id: d.asset.id })),
         iconBtn('folder-opened', 'Reveal in File Explorer', () => command('reveal', { id: d.asset.id })),
-        canRename ? iconBtn('trash', 'Delete', () => command('delete', { id: d.asset.id })) : null
+        canRename || (d.asset.kind === 'mcp' && d.asset.file && d.asset.jsonPath) ? iconBtn('trash', 'Delete', () => command('delete', { id: d.asset.id })) : null,
+        d.asset.kind === 'plugin' ? iconBtn('trash', 'Uninstall plugin', () => command('uninstallPlugin', { id: d.asset.id })) : null
       ),
       editable()
         ? el(
@@ -547,12 +560,12 @@
       );
       const files = renderFiles();
       if (files) body.append(files);
-    } else if (d.mode === 'code') {
+    } else if (d.mode === 'code' || d.mode === 'settings') {
       body.append(
         el(
           'div',
           { className: 'editor' },
-          el('div', { className: 'group-label' }, 'Script'),
+          el('div', { className: 'group-label' }, d.mode === 'settings' ? 'JSON' : 'Script'),
           el('textarea', {
             value: state.draft.body,
             spellcheck: false,
@@ -602,20 +615,27 @@
         el('label', { for: 'mcp-enabled' }, repo ? `Enabled in ${repo.label}` : 'Enabled in every folder'),
         !repo && a.offIn ? el('span', { className: 'desc' }, `Off in ${a.offIn} of ${a.folders} folders. Switch on to enable it everywhere.`) : null
       ),
-      el('div', { className: 'facts' }, facts.map(([k, v]) => [el('span', { className: 'key' }, k), el('span', { className: 'value' }, v)])),
-      a.about ? el('p', { className: 'about' }, a.about) : null
+      el('div', { className: 'facts' }, facts.flatMap(([k, v]) => [el('span', { className: 'key' }, k), el('span', { className: 'value' }, v)]))
     );
+    if (a.about) box.append(el('p', { className: 'about' }, a.about));
     if (!info) box.append(el('div', { className: 'empty flush' }, 'Asking the server for its tools...'));
-    else if (info.error) box.append(el('div', { className: 'empty flush' }, info.error));
+    else if (info.error)
+      box.append(
+        el('div', { className: 'empty flush' }, info.error),
+        el(
+          'div',
+          { className: 'toolbar' },
+          info.signIn ? el('button', { className: 'primary', onclick: () => vscode.postMessage({ type: 'mcpSignIn', id: a.id }) }, icon('sign-in'), 'Sign in') : null,
+          el('button', { className: 'secondary', onclick: () => vscode.postMessage({ type: 'mcpRetry', id: a.id }) }, icon('refresh'), 'Retry')
+        )
+      );
     else {
-      if (info.server) box.append(el('div', { className: 'group-label' }, [info.server, info.version].filter(Boolean).join(' ')));
-      if (info.instructions) box.append(el('p', { className: 'about' }, info.instructions));
       box.append(
         el('div', { className: 'group-label' }, `Tools (${(info.tools || []).length})`),
         el(
           'div',
           { className: 'tool-list' },
-          (info.tools || []).map(t => el('div', { className: 'tool' }, el('span', { className: 'name' }, t.name), t.description ? el('span', { className: 'desc' }, t.description) : null))
+          (info.tools || []).map(t => el('div', { className: 'tool' }, el('span', { className: 'name' }, t.name)))
         )
       );
     }
