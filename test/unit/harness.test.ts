@@ -3,7 +3,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { createAsset, duplicateAsset, fromFields, globalScope, knownRepos, readMarkdown, renameAsset, repoScope, scan, serializeMarkdown, setPluginEnabled, toFields } from '../../src/harness';
+import { applyMcpState, parseMcpList, mcpToolPrefix, setMcpEnabled } from '../../src/harness';
+import { createAsset, duplicateAsset, expandRepoFolders, fromFields, globalScope, knownRepos, readMarkdown, renameAsset, repoScope, scan, serializeMarkdown, setFrontmatterList, setPluginEnabled, toFields } from '../../src/harness';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-'));
@@ -121,4 +122,78 @@ test('workspace folders with a local harness are listed even under the temp fold
   const repos = knownRepos([repo], config).map(r => r.toLowerCase());
   assert.ok(repos.includes(path.resolve(repo).toLowerCase()));
   assert.ok(!repos.includes(path.resolve(scratch).toLowerCase()));
+});
+
+test('tools keep their yaml shape: string, flow list, multi-line block list', () => {
+  assert.equal(setFrontmatterList('---\nname: a\ntools: Read, Write\n---\nBody\n', 'tools', ['Read', 'Bash']), '---\nname: a\ntools: Read, Bash\n---\nBody\n');
+  assert.equal(setFrontmatterList('---\ntools: [Read, Write]\nmodel: opus\n---\n', 'tools', ['Read', 'mcp__x__*']), '---\ntools: [ Read, mcp__x__* ]\nmodel: opus\n---\n');
+  assert.equal(
+    setFrontmatterList('---\ntools:\n  - Read\n  - Write\nmodel: opus\n---\nBody\n', 'tools', ['Read', 'Grep', 'Glob']),
+    '---\ntools:\n  - Read\n  - Grep\n  - Glob\nmodel: opus\n---\nBody\n'
+  );
+  assert.equal(setFrontmatterList('---\r\ntools:\r\n  - Read\r\n---\r\nBody\r\n', 'tools', ['Edit']), '---\r\ntools:\r\n  - Edit\r\n---\r\nBody\r\n');
+  assert.deepEqual(fromFields([{ key: 'tools', type: 'list', value: 'Read,\nWrite, Bash\n' }]), { tools: ['Read', 'Write', 'Bash'] });
+});
+
+test('add repo takes a repo folder or a parent folder of repos', () => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'customers-'));
+  fs.mkdirSync(path.join(parent, 'shop', '.claude'), { recursive: true });
+  fs.mkdirSync(path.join(parent, 'portal'), { recursive: true });
+  fs.writeFileSync(path.join(parent, 'portal', 'CLAUDE.md'), '# Portal\n');
+  fs.mkdirSync(path.join(parent, 'notes'), { recursive: true });
+  const userConfig = path.join(parent, 'user.json');
+  fs.writeFileSync(userConfig, '{}');
+  const names = (folders: string[]) => knownRepos(expandRepoFolders(folders), userConfig).map(p => path.basename(p));
+  assert.deepEqual(names([parent]), ['portal', 'shop']);
+  assert.deepEqual(names([path.join(parent, 'shop')]), ['shop']);
+  assert.deepEqual(names([path.join(parent, 'missing')]), []);
+});
+
+test('global mcp servers from claude mcp list, with tool prefixes', () => {
+  const out = 'Checking MCP server health…\n\nclaude.ai Microsoft Learn: https://learn.microsoft.com/api/mcp - ✔ Connected\nplugin:design:slack: https://mcp.slack.com/mcp (HTTP) - ! Needs authentication\nplugin:design:gmail:  (HTTP) - - Not configured\n';
+  assert.deepEqual(parseMcpList(out), [
+    { name: 'claude.ai Microsoft Learn', target: 'https://learn.microsoft.com/api/mcp', status: 'Connected' },
+    { name: 'plugin:design:slack', target: 'https://mcp.slack.com/mcp (HTTP)', status: 'Needs authentication' },
+    { name: 'plugin:design:gmail', target: '(HTTP)', status: 'Not configured' },
+  ]);
+  assert.equal(mcpToolPrefix('claude.ai Microsoft Learn'), 'mcp__claude_ai_Microsoft_Learn__');
+  assert.equal(mcpToolPrefix('plugin:design:slack'), 'mcp__plugin_design_slack__');
+});
+
+test('mcp servers switch on and off per repo and in every folder', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-'));
+  const repo = path.join(dir, 'shop');
+  fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.mcp.json'), JSON.stringify({ mcpServers: { db: { command: 'db-mcp' } } }));
+  const userConfig = path.join(dir, 'user.json');
+  const repoKey = repo.replace(/\\/g, '/');
+  fs.writeFileSync(userConfig, JSON.stringify({ projects: { [repoKey]: { mcpServers: { search: { type: 'http', url: 'https://s' } } }, '/other': {} }, oauthAccount: { x: 1 } }, null, 2));
+
+  const scope = repoScope(repo, userConfig);
+  const repoMcp = scan(scope).find(c => c.kind === 'mcp')!;
+  assert.deepEqual(repoMcp.items.map(a => [a.name, a.source]), [['db', 'project'], ['search', 'local']]);
+
+  const global = { id: 'global', label: 'Global', path: '', categories: [{ ...repoMcp, items: [{ ...repoMcp.items[1], id: 'global|mcp:claude.ai Learn', scope: 'global', name: 'claude.ai Learn', source: 'claude.ai' as const, file: '' }] }] };
+  const views = () => [global, { id: scope.id, label: 'shop', path: repo, categories: [repoMcp] }];
+  setMcpEnabled(userConfig, repoMcp.items[0], repo, false);
+  setMcpEnabled(userConfig, repoMcp.items[1], repo, false);
+  setMcpEnabled(userConfig, global.categories[0].items[0], undefined, false);
+  const data = JSON.parse(fs.readFileSync(userConfig, 'utf8'));
+  assert.deepEqual(data.projects[repoKey].disabledMcpjsonServers, ['db']);
+  assert.deepEqual(data.projects[repoKey].disabledMcpServers, ['search', 'claude.ai Learn']);
+  assert.deepEqual(data.projects['/other'].disabledMcpServers, ['claude.ai Learn']);
+  assert.deepEqual(data.oauthAccount, { x: 1 });
+
+  const v = views();
+  applyMcpState(v, userConfig);
+  assert.equal(v[0].categories[0].items[0].enabled, false);
+  assert.equal(v[0].categories[0].items[0].offIn, 2);
+  assert.deepEqual(v[1].categories[0].items.map(a => a.enabled), [false, false]);
+
+  setMcpEnabled(userConfig, repoMcp.items[0], repo, true);
+  setMcpEnabled(userConfig, global.categories[0].items[0], undefined, true);
+  const after = JSON.parse(fs.readFileSync(userConfig, 'utf8'));
+  assert.deepEqual(after.projects[repoKey].disabledMcpjsonServers, []);
+  assert.deepEqual(after.projects[repoKey].enabledMcpjsonServers, ['db']);
+  assert.deepEqual(after.projects['/other'].disabledMcpServers, []);
 });

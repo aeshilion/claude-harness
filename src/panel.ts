@@ -1,14 +1,25 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { Asset, Field, ScopeView, fromFields, kindInfo, readMarkdown, readText, toFields, writeMarkdown, writeText } from './harness';
+import { McpInfo, probeHttp } from './probe';
+import { pickTools, splitTools } from './tools';
 
 export interface Detail {
   asset: Asset;
-  mode: 'markdown' | 'code' | 'json' | 'plugin';
+  mode: 'markdown' | 'code' | 'json' | 'plugin' | 'mcp';
   fields: Field[];
   knownFields: string[];
   body: string;
 }
+
+const colorBelowTools = (fields: Field[]): Field[] => {
+  const color = fields.find(f => f.key === 'color');
+  const tools = fields.find(f => f.key === 'tools');
+  if (!color || !tools || fields.indexOf(color) > fields.indexOf(tools)) return fields;
+  const rest = fields.filter(f => f !== color);
+  rest.splice(rest.indexOf(tools) + 1, 0, color);
+  return rest;
+};
 
 interface Pending {
   id: string;
@@ -20,6 +31,7 @@ type Message =
   | { type: 'ready' }
   | { type: 'select'; id?: string; pending?: Pending }
   | { type: 'save'; pending: Pending }
+  | { type: 'configureTools'; id: string; key: string; value: string }
   | { type: 'command'; command: string; id?: string; kind?: string; scope?: string; rel?: string };
 
 export interface PanelHost {
@@ -38,7 +50,7 @@ export class HarnessPanel {
       if (id) HarnessPanel.current.select(id);
       return;
     }
-    const panel = vscode.window.createWebviewPanel('claudeHarness.panel', 'Global Harness', vscode.ViewColumn.Active, {
+    const panel = vscode.window.createWebviewPanel('claudeHarness.panel', 'Claude Harness', vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist')],
@@ -84,11 +96,39 @@ export class HarnessPanel {
     const info = kindInfo(asset.kind);
     if (info.markdown) {
       const doc = readMarkdown(asset.file);
-      return { asset, mode: 'markdown', fields: toFields(doc.data), knownFields: info.fields, body: doc.body };
+      return { asset, mode: 'markdown', fields: colorBelowTools(toFields(doc.data)), knownFields: info.fields, body: doc.body };
     }
     if (asset.kind === 'workflow') return { asset, mode: 'code', fields: [], knownFields: [], body: readText(asset.file) };
     if (asset.kind === 'plugin') return { asset, mode: 'plugin', fields: [], knownFields: [], body: '' };
+    if (asset.kind === 'mcp') {
+      void this.probe(asset);
+      return { asset, mode: 'mcp', fields: [], knownFields: [], body: asset.file ? this.jsonExcerpt(asset) : '' };
+    }
     return { asset, mode: 'json', fields: [], knownFields: [], body: this.jsonExcerpt(asset) };
+  }
+
+  private probes = new Map<string, Promise<McpInfo>>();
+
+  private async probe(asset: Asset): Promise<void> {
+    if (!this.probes.has(asset.id)) {
+      let url = asset.target ?? '';
+      let headers: Record<string, string> = {};
+      if (asset.file) {
+        try {
+          const config = JSON.parse(this.jsonExcerpt(asset)) as { url?: string; headers?: Record<string, string> };
+          url = config.url ?? '';
+          headers = config.headers ?? {};
+        } catch {
+          url = '';
+        }
+      }
+      this.probes.set(
+        asset.id,
+        /^https?:\/\//.test(url) ? probeHttp(url, headers) : Promise.resolve({ error: 'Runs as a local command, so its tools are known only once Claude starts it.' })
+      );
+    }
+    const info = await this.probes.get(asset.id)!;
+    this.post({ type: 'mcpInfo', id: asset.id, info });
   }
 
   private jsonExcerpt(asset: Asset): string {
@@ -136,6 +176,11 @@ export class HarnessPanel {
       case 'save':
         if (this.save(m.pending)) this.post({ type: 'detail', detail: this.detail(m.pending.id) });
         return;
+      case 'configureTools': {
+        const tools = await pickTools(this.host.views(), this.host.find(m.id), splitTools(m.value));
+        if (tools) this.post({ type: 'tools', id: m.id, key: m.key, value: tools.join(', ') });
+        return;
+      }
       case 'command':
         if (m.command === 'openFile' && m.id && m.rel) {
           const asset = this.host.find(m.id);
@@ -160,7 +205,7 @@ export class HarnessPanel {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${codicons}">
 <link rel="stylesheet" href="${media('panel.css')}">
-<title>Global Harness</title>
+<title>Claude Harness</title>
 </head>
 <body data-logo="${media('harness-tab.svg')}">
 <div id="app"></div>

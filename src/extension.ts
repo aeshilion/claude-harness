@@ -1,3 +1,6 @@
+import { exec } from 'child_process';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   Asset,
@@ -7,15 +10,24 @@ import {
   HarnessScope,
   Kind,
   KINDS,
+  expandRepoFolders,
   knownRepos,
+  McpSource,
+  applyMcpState,
+  parseMcpList,
+  pluginDescription,
+  setMcpEnabled,
+  parseMarkdown,
   renameAsset,
   repoScope,
   scan,
   ScopeView,
+  setFrontmatterList,
   setPluginEnabled,
   validateName,
 } from './harness';
 import { HarnessPanel, PanelHost } from './panel';
+import { pickTools, splitTools, TOOL_FIELDS } from './tools';
 import { HarnessTree, Node } from './tree';
 
 const WATCHED = '{CLAUDE.md,settings.json,settings.local.json,agents/**,skills/**,commands/**,output-styles/**,rules/**,workflows/**,plugins/installed_plugins.json}';
@@ -30,17 +42,56 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const assets = () => views.flatMap(v => v.categories.flatMap(c => c.items));
   const find = (id: string): Asset | undefined => assets().find(a => a.id === id);
+  const samePath = (a: string, b: string) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+  const assetOfFile = (file: string) => assets().find(a => samePath(a.file, file));
+  const lensesChanged = new vscode.EventEmitter<void>();
   const scopeOf = (asset: Asset) => scopes.find(s => s.id === asset.scope) ?? global;
 
   const loadScopes = () => {
     const folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-    scopes = [global, ...knownRepos(folders).map(repoScope)];
+    const config = vscode.workspace.getConfiguration('claudeHarness');
+    const added = expandRepoFolders(config.get<string[]>('repoFolders') ?? []);
+    const removed = config.get<string[]>('removedRepos') ?? [];
+    const repos = knownRepos([...folders, ...added]).filter(dir => !removed.some(r => samePath(r, dir)));
+    scopes = [global, ...repos.map(dir => repoScope(dir))];
   };
+
+  let cliServers: Asset[] = [];
+  const loadCliServers = () =>
+    exec('claude mcp list', { cwd: os.homedir(), timeout: 180000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (_err, stdout) => {
+      const servers = parseMcpList(stdout ?? '');
+      if (!servers.length) return;
+      cliServers = servers.map(s => {
+        const source: McpSource = s.name.startsWith('claude.ai ') ? 'claude.ai' : s.name.startsWith('plugin:') ? 'plugin' : 'user';
+        const plugin = source === 'plugin' ? s.name.split(':')[1] : undefined;
+        return {
+          id: `${global.id}|mcp:${s.name}`,
+          scope: global.id,
+          kind: 'mcp',
+          name: s.name,
+          description: [s.target, s.status].filter(Boolean).join(' · '),
+          file: '',
+          mtime: 0,
+          source,
+          about: plugin ? pluginDescription(global.root, plugin) : undefined,
+          target: s.target.replace(/\s*\((HTTP|SSE|stdio)\)$/i, ''),
+          status: s.status,
+        };
+      });
+      refresh();
+    });
 
   const refresh = () => {
     views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, categories: scan(s) }));
+    const globalMcp = views[0].categories.find(c => c.kind === 'mcp');
+    if (globalMcp) {
+      for (const a of globalMcp.items) a.status = cliServers.find(c => c.name === a.name)?.status;
+      globalMcp.items.push(...cliServers.filter(c => !globalMcp.items.some(a => a.name === c.name)).map(c => ({ ...c })));
+    }
+    applyMcpState(views, global.userConfig);
     tree.setCategories(views[0].categories);
     HarnessPanel.update();
+    lensesChanged.fire();
   };
   const scheduleRefresh = () => {
     if (timer) clearTimeout(timer);
@@ -85,15 +136,52 @@ export function activate(context: vscode.ExtensionContext): void {
   const status = vscode.window.createStatusBarItem('claudeHarness.status', vscode.StatusBarAlignment.Left, 0);
   status.name = 'Claude Harness';
   status.text = '$(hubot) Claude Harness';
-  status.tooltip = 'Open the global Claude harness';
+  status.tooltip = 'Open the Claude harness';
   status.command = 'claudeHarness.open';
   status.show();
 
+  const toolLenses: vscode.CodeLensProvider = {
+    onDidChangeCodeLenses: lensesChanged.event,
+    provideCodeLenses: doc => {
+      if (!assetOfFile(doc.uri.fsPath) || doc.lineAt(0).text.trim() !== '---') return [];
+      const lenses: vscode.CodeLens[] = [];
+      for (let i = 1; i < doc.lineCount; i++) {
+        const line = doc.lineAt(i).text;
+        if (line.trim() === '---') break;
+        const key = /^([A-Za-z-]+)\s*:/.exec(line)?.[1];
+        if (key && TOOL_FIELDS.includes(key))
+          lenses.push(new vscode.CodeLens(doc.lineAt(i).range, { title: 'Configure Tools...', command: 'claudeHarness.configureTools', arguments: [doc.uri, key] }));
+      }
+      return lenses;
+    },
+  };
+
   context.subscriptions.push(
     status,
+    lensesChanged,
+    vscode.languages.registerCodeLensProvider({ language: 'markdown', scheme: 'file' }, toolLenses),
+    vscode.commands.registerCommand('claudeHarness.configureTools', async (uri: vscode.Uri, key: string) => {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      const tools = await pickTools(views, assetOfFile(uri.fsPath), splitTools(parseMarkdown(doc.getText()).data[key]));
+      if (!tools) return;
+      const old = doc.getText();
+      const next = setFrontmatterList(old, key, tools);
+      if (next === old) return;
+      let start = 0;
+      while (start < old.length && start < next.length && old[start] === next[start]) start++;
+      let end = 0;
+      while (end < old.length - start && end < next.length - start && old[old.length - 1 - end] === next[next.length - 1 - end]) end++;
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(uri, new vscode.Range(doc.positionAt(start), doc.positionAt(old.length - end)), next.slice(start, next.length - end));
+      await vscode.workspace.applyEdit(edit);
+    }),
     vscode.window.createTreeView('claudeHarness.tree', { treeDataProvider: tree, showCollapseAll: true }),
     { dispose: () => watcher?.dispose() },
     vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('claudeHarness.repoFolders') || e.affectsConfiguration('claudeHarness.removedRepos')) {
+        loadScopes();
+        refresh();
+      }
       if (!e.affectsConfiguration('claudeHarness.root')) return;
       global = globalScope(vscode.workspace.getConfiguration('claudeHarness').get<string>('root'));
       loadScopes();
@@ -106,9 +194,62 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('claudeHarness.open', (id?: string) => HarnessPanel.show(context, host, typeof id === 'string' ? id : undefined)),
+    vscode.commands.registerCommand('claudeHarness.addRepo', async () => {
+      const picked = await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        canSelectMany: true,
+        openLabel: 'Add Repo',
+        title: 'Add a repo folder, or a parent folder that holds several repos',
+      });
+      if (!picked?.length) return;
+      const config = vscode.workspace.getConfiguration('claudeHarness');
+      const current = config.get<string[]>('repoFolders') ?? [];
+      const next = [...current];
+      for (const uri of picked) if (!next.some(f => samePath(f, uri.fsPath))) next.push(uri.fsPath);
+      const before = scopes.length;
+      const removed = config.get<string[]>('removedRepos') ?? [];
+      const keep = removed.filter(r => !picked.some(uri => samePath(r, uri.fsPath) || samePath(path.dirname(r), uri.fsPath)));
+      if (keep.length !== removed.length) await config.update('removedRepos', keep, vscode.ConfigurationTarget.Global);
+      await config.update('repoFolders', next, vscode.ConfigurationTarget.Global);
+      loadScopes();
+      refresh();
+      const found = scopes.length - before;
+      void vscode.window.showInformationMessage(
+        found ? `Added ${found} ${found === 1 ? 'repo' : 'repos'} to the Claude harness.` : 'No new repo with a .claude folder or a CLAUDE.md found there.'
+      );
+    }),
+    vscode.commands.registerCommand('claudeHarness.removeRepo', async (id?: string) => {
+      const config = vscode.workspace.getConfiguration('claudeHarness');
+      const folders = config.get<string[]>('repoFolders') ?? [];
+      let targets: { dir: string; folder: boolean }[];
+      const repo = typeof id === 'string' ? scopes.find(s => s.id === id) : undefined;
+      if (repo) targets = [{ dir: repo.base, folder: false }];
+      else {
+        type Item = vscode.QuickPickItem & { dir?: string; folder?: boolean };
+        const items: Item[] = [];
+        if (folders.length) items.push({ label: 'Added folders', kind: vscode.QuickPickItemKind.Separator }, ...folders.map(f => ({ label: `$(folder) ${path.basename(f)}`, description: f, dir: f, folder: true })));
+        const repos = scopes.filter(s => s.id !== global.id);
+        if (repos.length) items.push({ label: 'Repositories', kind: vscode.QuickPickItemKind.Separator }, ...repos.map(s => ({ label: `$(repo) ${s.label}`, description: s.base, dir: s.base, folder: false })));
+        const picked = await vscode.window.showQuickPick(items, { canPickMany: true, title: 'Remove from the Claude harness', placeHolder: 'Pick repos or added parent folders. Nothing is deleted on disk.', matchOnDescription: true });
+        if (!picked?.length) return;
+        targets = picked.map(p => ({ dir: p.dir!, folder: !!p.folder }));
+      }
+      const nextFolders = folders.filter(f => !targets.some(t => samePath(t.dir, f)));
+      const removed = config.get<string[]>('removedRepos') ?? [];
+      const nextRemoved = [...removed, ...targets.filter(t => !t.folder && !folders.some(f => samePath(f, t.dir)) && !removed.some(r => samePath(r, t.dir))).map(t => t.dir)];
+      const before = scopes.length;
+      if (nextFolders.length !== folders.length) await config.update('repoFolders', nextFolders, vscode.ConfigurationTarget.Global);
+      if (nextRemoved.length !== removed.length) await config.update('removedRepos', nextRemoved, vscode.ConfigurationTarget.Global);
+      loadScopes();
+      refresh();
+      const gone = before - scopes.length;
+      void vscode.window.showInformationMessage(`Removed ${gone} ${gone === 1 ? 'repo' : 'repos'} from the Claude harness. Nothing was deleted on disk.`);
+    }),
     vscode.commands.registerCommand('claudeHarness.refresh', () => {
       loadScopes();
       refresh();
+      loadCliServers();
     }),
 
     vscode.commands.registerCommand('claudeHarness.create', async (arg?: unknown) => {
@@ -169,6 +310,13 @@ export function activate(context: vscode.ExtensionContext): void {
       refresh();
     }),
 
+    vscode.commands.registerCommand('claudeHarness.toggleMcp', (arg?: unknown) => {
+      const asset = assetOf(arg);
+      if (asset?.kind !== 'mcp') return;
+      const repo = asset.scope === global.id ? undefined : scopeOf(asset).base;
+      run(() => setMcpEnabled(global.userConfig, asset, repo, !asset.enabled));
+    }),
+    vscode.commands.registerCommand('claudeHarness.openConnectors', () => vscode.env.openExternal(vscode.Uri.parse('https://claude.ai/new#customize/connectors/yours'))),
     vscode.commands.registerCommand('claudeHarness.togglePlugin', (arg?: unknown) => {
       const asset = assetOf(arg);
       if (asset?.kind === 'plugin') run(() => setPluginEnabled(scopeOf(asset), asset.name, !asset.enabled));
@@ -178,6 +326,7 @@ export function activate(context: vscode.ExtensionContext): void {
   loadScopes();
   watch();
   refresh();
+  loadCliServers();
 }
 
 export function deactivate(): void {}

@@ -1,55 +1,31 @@
 # Claude Harness
 
-Claude Harness is a VS Code extension that shows and edits your Claude Code harness in `~/.claude`.
+Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.
 
-Dschango, you can now see and edit your global harness objects inside VS Code: memory (`CLAUDE.md`), rules, agents, skills, commands, output styles, workflows, hooks, MCP servers, plugins and settings. Below the global harness, the panel also lists the harness of each repository Claude Code knows and each open workspace folder that has a `.claude` folder or a `CLAUDE.md`.
+## Quick start
 
-## Install
+1. Open the Extensions view (Ctrl+Shift+X), search for **Claude Harness**, and click **Install**. You can also run `code --install-extension integrations-at.claude-harness` in a terminal.
+2. Click **Claude Harness** in the status bar, or its icon in the activity bar. The main window opens.
+3. Pick an item in the sidebar to view and edit it. The global harness is read from `~/.claude`.
 
-The extension is not on the Marketplace, so sideload it from source.
+> Note: Claude Harness needs Claude Code and VS Code 1.100 or newer. The global MCP server list comes from `claude mcp list`, so the `claude` command must be on your PATH.
 
-Requirements: Node.js and VS Code 1.100 or newer.
+## Features
 
-```powershell
-git clone https://github.com/alexander-kastil/claude-harness.git
-cd claude-harness
-npm install
-npm run package
-code --install-extension claude-harness-0.1.4.vsix --force
-```
-
-You can also install the file from the UI: open the Extensions view, choose the "..." menu, then "Install from VSIX...", and select `claude-harness-0.1.4.vsix`.
-
-After installing, run "Developer: Reload Window" from the command palette.
-
-To update, pull the latest changes, run `npm run package` again, and install the new VSIX with `--force`.
-
-## Use
-
-Click "Global Harness" in the status bar (bottom bar) or the Claude Harness icon in the activity bar. The status bar entry and the activity bar view both open the main window.
-
-| Area | What you can do |
+| Feature | Summary |
 | --- | --- |
-| Sidebar (main window) | Browse every kind by section, search, and create new items with the "+" button on creatable sections. |
-| Detail view | Edit frontmatter fields and instructions, then save with Ctrl+S or the Save button. Revert discards changes. |
-| Rename, duplicate | Available for agents, skills, commands, output styles, rules and workflows. |
-| Delete | Moves the item to the trash after a confirmation. |
-| Plugins | Toggle enabled or disabled from the tree or the detail view. |
-| Files | Open a file in the editor or reveal it in File Explorer. Skill folders list their files. |
+| [Main window](docs/main-window.md) | Browses the global harness and each repository in one window, with search and an overview |
+| [Harness kinds](docs/harness-kinds.md) | The eleven kinds of harness items, where they are stored and which ones you can change |
+| [Editing](docs/editing.md) | Edits frontmatter and instructions, saves or reverts, and creates, renames, duplicates or deletes items |
+| [Repositories](docs/repositories.md) | Shows the harness of each repo, and adds or removes repos |
+| [Configure Tools](docs/configure-tools.md) | Picks the tools an agent, skill or command may use |
+| [MCP servers](docs/mcp-servers.md) | Lists MCP servers with their source and status, sorts them and shows their live tools |
+| [MCP switches](docs/mcp-toggles.md) | Turns an MCP server on or off for one repo or in every folder |
+| [Plugins](docs/plugins.md) | Enables or disables installed plugins |
+| [Settings](docs/settings.md) | Sets the global harness folder and the repo lists the extension keeps |
 
-Hooks, MCP servers and settings are shown read-only, with their JSON excerpt in the detail view. Use "Open in editor" to change them.
+## License
 
-The activity bar view is a tree with the same kinds. Right-click an item for open, reveal, rename, duplicate and delete.
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0, (c) 2026 Alexander Kastil, [integrations.at](https://integrations.at). See [LICENSE](LICENSE).
 
-The root folder is set with `claudeHarness.root`. The default is `~/.claude`.
-
-## Develop
-
-```powershell
-npm test
-npm run watch
-```
-
-`npm test` compiles the sources and runs the unit tests in `out/test/unit`. `npm run watch` recompiles on every change.
-
-The code lives in [src/extension.ts](src/extension.ts) (commands and wiring), [src/harness.ts](src/harness.ts) (scanning and file writes), [src/panel.ts](src/panel.ts) (main window host), [src/tree.ts](src/tree.ts) (activity bar tree) and [media/panel.js](media/panel.js) (main window UI).
+<a href="https://integrations.at/"><img src="https://media.integrations.at/images/header-logo-245x36.webp" alt="integrations.at" width="160"></a>

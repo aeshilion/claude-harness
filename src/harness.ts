@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
-import { parse as parseYaml, parseDocument, stringify as stringifyYaml } from 'yaml';
+import { isSeq, parse as parseYaml, parseDocument, stringify as stringifyYaml, YAMLSeq } from 'yaml';
 
 export type Kind =
   | 'memory'
@@ -75,7 +75,15 @@ export interface Asset {
   enabled?: boolean;
   jsonPath?: (string | number)[];
   mtime: number;
+  source?: McpSource;
+  about?: string;
+  target?: string;
+  status?: string;
+  offIn?: number;
+  folders?: number;
 }
+
+export type McpSource = 'user' | 'local' | 'project' | 'claude.ai' | 'plugin';
 
 export interface Category extends KindInfo {
   items: Asset[];
@@ -88,6 +96,7 @@ export interface HarnessScope {
   root: string;
   memory: string[];
   mcpFile: string;
+  userConfig: string;
   installedPlugins: boolean;
 }
 
@@ -100,18 +109,94 @@ export interface ScopeView {
 
 export const globalScope = (root?: string): HarnessScope => {
   const dir = root && root.trim() ? root : path.join(os.homedir(), '.claude');
-  return { id: 'global', label: 'Global', base: dir, root: dir, memory: ['CLAUDE.md'], mcpFile: path.join(os.homedir(), '.claude.json'), installedPlugins: true };
+  const userConfig = path.join(os.homedir(), '.claude.json');
+  return { id: 'global', label: 'Global', base: dir, root: dir, memory: ['CLAUDE.md'], mcpFile: userConfig, userConfig, installedPlugins: true };
 };
 
-export const repoScope = (dir: string): HarnessScope => ({
+export const repoScope = (dir: string, userConfig = path.join(os.homedir(), '.claude.json')): HarnessScope => ({
   id: `repo:${dir}`,
   label: path.basename(dir),
   base: dir,
   root: path.join(dir, '.claude'),
   memory: ['CLAUDE.md', 'CLAUDE.local.md', '.claude/CLAUDE.md'],
   mcpFile: path.join(dir, '.mcp.json'),
+  userConfig,
   installedPlugins: false,
 });
+
+type ServerConfig = { type?: string; command?: string; url?: string; args?: string[] };
+const serverTarget = (server: ServerConfig) => `${server.type ?? 'stdio'} · ${server.url ?? [server.command, ...(server.args ?? [])].filter(Boolean).join(' ')}`;
+const samePath = (a: string, b: string) => {
+  const norm = (p: string) => path.resolve(p).replace(/[\\/]+$/, '');
+  return process.platform === 'win32' ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
+};
+
+export const projectKey = (projects: Record<string, unknown>, dir: string): string | undefined => Object.keys(projects).find(k => samePath(k, dir));
+
+type ProjectEntry = { disabledMcpServers?: string[]; disabledMcpjsonServers?: string[]; enabledMcpjsonServers?: string[] };
+
+export function applyMcpState(views: ScopeView[], userConfig: string): void {
+  const projects = (readJson(userConfig).projects ?? {}) as Record<string, ProjectEntry>;
+  const entries = Object.values(projects);
+  for (const view of views) {
+    const servers = view.categories.find(c => c.kind === 'mcp')?.items ?? [];
+    const entry = view.id === 'global' ? undefined : projects[projectKey(projects, view.path) ?? ''];
+    for (const a of servers) {
+      if (view.id === 'global') {
+        a.offIn = entries.filter(p => (p.disabledMcpServers ?? []).includes(a.name)).length;
+        a.folders = entries.length;
+        a.enabled = a.offIn === 0;
+      } else {
+        const list = a.source === 'project' ? entry?.disabledMcpjsonServers : entry?.disabledMcpServers;
+        a.enabled = !(list ?? []).includes(a.name);
+      }
+    }
+  }
+}
+
+export function setMcpEnabled(userConfig: string, asset: Asset, repoDir: string | undefined, enabled: boolean): void {
+  let text = readText(userConfig);
+  const projects = (readJson(userConfig).projects ?? {}) as Record<string, ProjectEntry>;
+  const set = (key: string, field: keyof ProjectEntry, change: (list: string[]) => string[]) => {
+    const current = projects[key]?.[field] ?? [];
+    const next = change(current);
+    if (JSON.stringify(next) === JSON.stringify(current)) return;
+    text = applyEdits(text, modify(text, ['projects', key, field], next, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
+  };
+  const without = (list: string[]) => list.filter(n => n !== asset.name);
+  const withName = (list: string[]) => (list.includes(asset.name) ? list : [...list, asset.name]);
+  if (!repoDir) {
+    for (const key of Object.keys(projects)) set(key, 'disabledMcpServers', enabled ? without : withName);
+  } else {
+    const key = projectKey(projects, repoDir) ?? repoDir.replace(/\\/g, '/');
+    if (asset.source === 'project') {
+      set(key, 'disabledMcpjsonServers', enabled ? without : withName);
+      if (enabled) set(key, 'enabledMcpjsonServers', withName);
+    } else set(key, 'disabledMcpServers', enabled ? without : withName);
+  }
+  fs.writeFileSync(userConfig, text, 'utf8');
+}
+
+export function pluginDescription(root: string, plugin: string): string {
+  const candidates: string[] = [];
+  const synced = path.join(root, 'plugins', 'synced');
+  for (const org of safeDirs(synced)) candidates.push(path.join(synced, org, plugin, '.claude-plugin', 'plugin.json'));
+  const cache = path.join(root, 'plugins', 'cache');
+  for (const market of safeDirs(cache)) for (const version of safeDirs(path.join(cache, market, plugin))) candidates.push(path.join(cache, market, plugin, version, '.claude-plugin', 'plugin.json'));
+  for (const file of candidates) {
+    const description = readJson(file).description;
+    if (typeof description === 'string' && description) return description;
+  }
+  return '';
+}
+
+function safeDirs(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('.')).map(d => d.name);
+  } catch {
+    return [];
+  }
+}
 
 const isInside = (child: string, parent: string) => {
   const rel = path.relative(parent, child);
@@ -125,6 +210,17 @@ const realPath = (p: string) => {
     return p;
   }
 };
+
+export function expandRepoFolders(folders: string[]): string[] {
+  return folders.flatMap(folder => {
+    try {
+      const children = fs.readdirSync(folder, { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('.') && !SKIP_DIRS.has(d.name));
+      return [folder, ...children.map(d => path.join(folder, d.name))];
+    } catch {
+      return [];
+    }
+  });
+}
 
 export function knownRepos(extra: string[], userConfig = path.join(os.homedir(), '.claude.json')): string[] {
   const projects = Object.keys((readJson(userConfig).projects ?? {}) as Record<string, unknown>);
@@ -225,10 +321,41 @@ export function serializeMarkdown(original: string, data: Record<string, unknown
   return eol === '\n' ? out : out.replace(/\n/g, eol);
 }
 
+export function setFrontmatterList(text: string, key: string, items: string[]): string {
+  const m = FRONTMATTER.exec(text);
+  if (!m) return text;
+  const eol = eolOf(text);
+  const doc = parseDocument(m[1].replace(/\r\n/g, '\n'));
+  const node = doc.get(key, true);
+  if (isSeq(node)) {
+    const seq = doc.createNode(items) as YAMLSeq;
+    seq.flow = node.flow;
+    doc.set(key, seq);
+  } else doc.set(key, items.join(', '));
+  const front = `---\n${doc.toString({ lineWidth: 0 })}---\n`;
+  return (eol === '\n' ? front : front.replace(/\n/g, eol)) + text.slice(m[0].length);
+}
+
 export function writeMarkdown(file: string, data: Record<string, unknown>, body: string): void {
   const original = fs.existsSync(file) ? readText(file) : '';
   fs.writeFileSync(file, serializeMarkdown(original, data, body), 'utf8');
 }
+
+export interface CliServer {
+  name: string;
+  target: string;
+  status: string;
+}
+
+export function parseMcpList(output: string): CliServer[] {
+  return output
+    .split(/\r?\n/)
+    .map(line => /^(.+?): (.*?) - \S (.+)$/u.exec(line.trim()))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map(m => ({ name: m[1], target: m[2].trim(), status: m[3].trim() }));
+}
+
+export const mcpToolPrefix = (server: string) => `mcp__${server.replace(/[^A-Za-z0-9_-]/g, '_')}__`;
 
 export function readText(file: string): string {
   return fs.readFileSync(file, 'utf8');
@@ -349,17 +476,38 @@ export function scan(scope: HarnessScope): Category[] {
     });
   }
 
-  const servers = (readJson(scope.mcpFile).mcpServers ?? {}) as Record<string, { type?: string; command?: string; url?: string; args?: string[] }>;
+  const servers = (readJson(scope.mcpFile).mcpServers ?? {}) as Record<string, ServerConfig>;
+  const source: McpSource = scope.id === 'global' ? 'user' : 'project';
   for (const [name, server] of Object.entries(servers)) {
     items.get('mcp')!.push(
       make('mcp', name, {
         name,
-        description: `${server.type ?? 'stdio'} · ${server.url ?? [server.command, ...(server.args ?? [])].filter(Boolean).join(' ')}`,
+        description: serverTarget(server),
         file: scope.mcpFile,
         jsonPath: ['mcpServers', name],
         mtime: mtimeOf(scope.mcpFile),
+        source,
+        target: server.url ?? [server.command, ...(server.args ?? [])].filter(Boolean).join(' '),
       })
     );
+  }
+  if (scope.id !== 'global') {
+    const projects = (readJson(scope.userConfig).projects ?? {}) as Record<string, { mcpServers?: Record<string, ServerConfig> }>;
+    const key = projectKey(projects, scope.base);
+    for (const [name, server] of Object.entries((key && projects[key].mcpServers) || {})) {
+      if (servers[name]) continue;
+      items.get('mcp')!.push(
+        make('mcp', `local:${name}`, {
+          name,
+          description: serverTarget(server),
+          file: scope.userConfig,
+          jsonPath: ['projects', key!, 'mcpServers', name],
+          mtime: mtimeOf(scope.userConfig),
+          source: 'local',
+          target: server.url ?? [server.command, ...(server.args ?? [])].filter(Boolean).join(' '),
+        })
+      );
+    }
   }
 
   const enabled = (settings.enabledPlugins ?? {}) as Record<string, boolean>;
@@ -515,7 +663,7 @@ export function fromFields(fields: Field[]): Record<string, unknown> {
         data[key] = Number(f.value);
         break;
       case 'list':
-        data[key] = String(f.value).split(',').map(s => s.trim()).filter(Boolean);
+        data[key] = String(f.value).split(/[,\n]/).map(s => s.trim()).filter(Boolean);
         break;
       case 'yaml':
         data[key] = parseYaml(String(f.value));

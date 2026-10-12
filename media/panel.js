@@ -5,9 +5,12 @@
     views: [],
     openRepos: new Set(saved.openRepos || []),
     detail: undefined,
+    repo: undefined,
     draft: undefined,
     filter: saved.filter || '',
     expanded: new Set(saved.expanded || []),
+    mcpSort: saved.mcpSort || 'name',
+    mcpInfo: {},
   };
   const app = document.getElementById('app');
 
@@ -28,7 +31,26 @@
   const logo = size => (document.body.dataset.logo ? el('img', { className: `logo ${size}`, src: document.body.dataset.logo, alt: '' }) : icon('hubot'));
   const iconBtn = (name, title, onclick, disabled) => el('button', { className: 'icon-btn', title, 'aria-label': title, onclick, disabled }, icon(name));
 
-  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos] });
+  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], mcpSort: state.mcpSort });
+  const SOURCES = {
+    user: { icon: 'account', label: 'Your config (~/.claude.json)' },
+    local: { icon: 'lock', label: 'Local to this repo (~/.claude.json)' },
+    project: { icon: 'repo', label: 'Repo .mcp.json' },
+    'claude.ai': { icon: 'cloud', label: 'claude.ai connector' },
+    plugin: { icon: 'extensions', label: 'Plugin' },
+  };
+  const SOURCE_ORDER = Object.keys(SOURCES);
+  const labelOf = a =>
+    a.kind !== 'mcp' ? a.name : a.source === 'claude.ai' ? a.name.replace(/^claude\.ai /, '') : a.source === 'plugin' ? a.name.split(':').slice(2).join(':') : a.name;
+  const pluginOf = a => (a.source === 'plugin' ? a.name.split(':')[1] : '');
+  const mcpDesc = a => [pluginOf(a) && `${pluginOf(a)} plugin`, a.enabled === false ? 'off' : a.offIn ? `off in ${a.offIn} folders` : '', a.status || a.target].filter(Boolean).join(' · ');
+  const statusRank = a => (a.enabled === false ? 9 : /^connected/i.test(a.status || '') ? 0 : /auth/i.test(a.status || '') ? 1 : /not configured/i.test(a.status || '') ? 3 : 2);
+  const byLabel = (a, b) => labelOf(a).localeCompare(labelOf(b)) || a.name.localeCompare(b.name);
+  const SORTS = {
+    name: byLabel,
+    source: (a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source) || byLabel(a, b),
+    status: (a, b) => statusRank(a) - statusRank(b) || byLabel(a, b),
+  };
   const editable = () => state.detail && (state.detail.mode === 'markdown' || state.detail.mode === 'code');
   const snapshot = d => JSON.stringify({ fields: d.fields, body: d.body });
   const isDirty = () => !!(state.draft && state.detail && snapshot(state.draft) !== snapshot(state.detail));
@@ -36,23 +58,30 @@
   const categoryOf = kind => (state.views[0] ? state.views[0].categories.find(c => c.kind === kind) : undefined);
   const viewOf = id => state.views.find(v => v.id === id);
   const RENAMABLE = ['agent', 'skill', 'command', 'outputStyle', 'rule', 'workflow'];
+  const TOOL_FIELDS = ['tools', 'disallowedTools', 'allowed-tools'];
   const MODELS = ['inherit', 'sonnet', 'opus', 'haiku', 'fable'];
 
   const select = id => {
     if (state.detail && state.detail.asset.id === id) return;
     vscode.postMessage({ type: 'select', id, pending: pending() });
   };
+  const showRepo = id => {
+    state.repo = id;
+    if (state.detail) select(undefined);
+    else render();
+  };
   const command = (cmd, extra) => vscode.postMessage(Object.assign({ type: 'command', command: cmd }, extra));
   const save = () => {
     if (isDirty()) vscode.postMessage({ type: 'save', pending: pending() });
   };
 
-  const matches = (a, q) => !q || a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q);
+  const matches = (a, q) => !q || a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q) || (a.about || '').toLowerCase().includes(q);
   const total = view => view.categories.reduce((n, c) => n + c.items.length, 0);
 
   function renderCategories(list, view, q, nested) {
     for (const cat of view.categories) {
       const items = cat.items.filter(a => matches(a, q));
+      if (cat.kind === 'mcp') items.sort(SORTS[state.mcpSort] || SORTS.name);
       if (!items.length && (q || nested)) continue;
       const key = `${view.id}|${cat.kind}`;
       const collapsed = !state.expanded.has(key) && !q;
@@ -69,6 +98,28 @@
           },
           icon(collapsed ? 'chevron-right' : 'chevron-down'),
           el('span', { className: 'label' }, cat.label),
+          cat.kind === 'mcp' && !collapsed && items.length > 1
+            ? el(
+                'select',
+                {
+                  className: 'sort',
+                  title: 'Sort by',
+                  onclick: e => e.stopPropagation(),
+                  onchange: e => {
+                    state.mcpSort = e.target.value;
+                    persist();
+                    render();
+                  },
+                },
+                Object.keys(SORTS).map(k => el('option', { value: k, selected: state.mcpSort === k }, `Sort: ${k}`))
+              )
+            : null,
+          cat.kind === 'mcp' && view.id === 'global'
+            ? iconBtn('link-external', 'Add a connector on claude.ai', e => {
+                e.stopPropagation();
+                command('openConnectors');
+              })
+            : null,
           cat.creatable
             ? iconBtn('add', `New ${cat.label}`, e => {
                 e.stopPropagation();
@@ -82,18 +133,20 @@
       if (!items.length) list.append(el('div', { className: 'empty' }, 'None'));
       for (const a of items) {
         const selected = state.detail && state.detail.asset.id === a.id;
-        const glyph = a.kind === 'plugin' ? (a.enabled ? 'pass-filled' : 'circle-large-outline') : cat.icon;
+        const glyph = a.kind === 'plugin' ? (a.enabled ? 'pass-filled' : 'circle-large-outline') : a.kind === 'mcp' && SOURCES[a.source] ? SOURCES[a.source].icon : cat.icon;
+        const off = (a.kind === 'plugin' || a.kind === 'mcp') && a.enabled === false;
+        const desc = a.kind === 'mcp' ? mcpDesc(a) : a.description;
         list.append(
           el(
             'div',
             {
-              className: `row${nested ? ' nested' : ''}${selected ? ' selected' : ''}${a.kind === 'plugin' && !a.enabled ? ' disabled' : ''}`,
-              title: a.description,
+              className: `row${nested ? ' nested' : ''}${selected ? ' selected' : ''}${off ? ' disabled' : ''}`,
+              title: desc,
               onclick: () => select(a.id),
             },
             icon(glyph),
-            el('span', { className: 'name' }, a.name),
-            a.description ? el('span', { className: 'desc' }, a.description) : null
+            el('span', { className: 'name' }, labelOf(a)),
+            desc ? el('span', { className: 'desc' }, desc) : null
           )
         );
       }
@@ -110,9 +163,16 @@
       list.append(block);
     }
     const visibleRepos = repos.filter(v => !q || v.categories.some(c => c.items.some(a => matches(a, q))));
-    if (visibleRepos.length) {
-      list.append(el('div', { className: 'scope-head' }, el('span', { className: 'label' }, 'Repositories'), el('span', { className: 'count' }, visibleRepos.length)));
-    }
+    list.append(
+      el(
+        'div',
+        { className: 'scope-head' },
+        el('span', { className: 'label' }, 'Repositories'),
+        iconBtn('repo-create', 'Add Repo...', () => command('addRepo')),
+        iconBtn('trash', 'Remove Repo...', () => command('removeRepo')),
+        el('span', { className: 'count' }, visibleRepos.length)
+      )
+    );
     for (const view of visibleRepos) {
       const open = state.openRepos.has(view.id) || !!q;
       const count = q ? view.categories.reduce((n, c) => n + c.items.filter(a => matches(a, q)).length, 0) : total(view);
@@ -120,12 +180,12 @@
         el(
           'div',
           {
-            className: 'repo-head',
+            className: `repo-head${!state.detail && state.repo === view.id ? ' selected' : ''}`,
             title: view.path,
             onclick: () => {
               open ? state.openRepos.delete(view.id) : state.openRepos.add(view.id);
               persist();
-              render();
+              showRepo(view.id);
             },
           },
           icon(open ? 'chevron-down' : 'chevron-right'),
@@ -161,9 +221,9 @@
         'div',
         { className: 'sidebar-head' },
         logo('logo-sm'),
-        el('span', {}, 'Global Harness'),
+        el('span', {}, 'Claude Harness'),
         el('span', { className: 'spacer' }),
-        iconBtn('home', 'Overview', () => select(undefined)),
+        iconBtn('home', 'Overview', () => showRepo(undefined)),
         iconBtn('add', 'New...', () => command('create')),
         iconBtn('refresh', 'Refresh', () => command('refresh'))
       ),
@@ -187,7 +247,7 @@
         'header',
         { className: 'main-head' },
         el('span', { className: 'big' }, logo('logo-lg')),
-        el('div', { className: 'title' }, el('h1', {}, 'Global Harness'), el('div', { className: 'path' }, `${global ? total(global) : 0} global assets · ${repos.length} repositories`))
+        el('div', { className: 'title' }, el('h1', {}, 'Claude Harness'), el('div', { className: 'path' }, `${global ? total(global) : 0} global assets · ${repos.length} repositories`))
       ),
       el(
         'div',
@@ -225,7 +285,7 @@
                     onclick: () => {
                       state.openRepos.add(v.id);
                       persist();
-                      render();
+                      showRepo(v.id);
                     },
                   },
                   icon('repo'),
@@ -260,12 +320,92 @@
     );
   }
 
+  function renderRepo(view) {
+    const items = view.categories.flatMap(c => c.items.map(a => Object.assign({ icon: c.icon }, a)));
+    const recent = items.sort((a, b) => b.mtime - a.mtime).slice(0, 12);
+    return el(
+      'section',
+      { className: 'main' },
+      el(
+        'header',
+        { className: 'main-head' },
+        el('span', { className: 'big' }, icon('repo')),
+        el('div', { className: 'title' }, el('h1', {}, view.label), el('div', { className: 'path', title: view.path }, `${total(view)} assets · ${view.path}`)),
+        el(
+          'div',
+          { className: 'toolbar' },
+          iconBtn('add', `New in ${view.label}`, () => command('create', { scope: view.id })),
+          iconBtn('trash', `Remove ${view.label} from the harness`, () => {
+            state.repo = undefined;
+            command('removeRepo', { id: view.id });
+          })
+        )
+      ),
+      el(
+        'div',
+        { className: 'main-body' },
+        el(
+          'div',
+          { className: 'overview' },
+          view.categories.map(c =>
+            el(
+              'div',
+              {
+                className: 'tile',
+                onclick: () => {
+                  state.expanded.add(`${view.id}|${c.kind}`);
+                  state.openRepos.add(view.id);
+                  persist();
+                  if (c.items[0]) select(c.items[0].id);
+                  else render();
+                },
+              },
+              el('span', { className: 'n' }, c.items.length),
+              el('span', { className: 'l' }, icon(c.icon), c.label)
+            )
+          )
+        ),
+        recent.length
+          ? el(
+              'div',
+              { className: 'recent' },
+              el('div', { className: 'group-label' }, 'Recently changed'),
+              recent.map(a =>
+                el(
+                  'div',
+                  { className: 'row', onclick: () => select(a.id) },
+                  icon(a.icon),
+                  el('span', { className: 'name' }, a.name),
+                  el('span', { className: 'desc' }, new Date(a.mtime).toLocaleString())
+                )
+              )
+            )
+          : null
+      )
+    );
+  }
+
+  const fit = box => {
+    box.style.height = 'auto';
+    box.style.height = `${box.scrollHeight + 2}px`;
+  };
+
   function fieldInput(f, i) {
     const update = value => {
       state.draft.fields[i] = Object.assign({}, f, { value });
       refreshHead();
     };
     if (f.type === 'boolean') return el('input', { type: 'checkbox', checked: f.value === true, onchange: e => update(e.target.checked) });
+    if (TOOL_FIELDS.includes(f.key)) {
+      const box = el('textarea', { className: 'tools', rows: 1, value: f.value, spellcheck: false, placeholder: 'comma separated', oninput: e => (update(e.target.value), fit(box)) });
+      requestAnimationFrame(() => fit(box));
+      return el(
+        'div',
+        { className: 'tools-field' },
+        box,
+        el('button', { className: 'link', onclick: () => vscode.postMessage({ type: 'configureTools', id: state.detail.asset.id, key: f.key, value: String(state.draft.fields[i].value) }) }, 'Configure Tools...')
+      );
+    }
     if (f.type === 'text' || f.type === 'yaml')
       return el('textarea', { className: f.type, rows: f.type === 'text' ? 4 : 3, value: f.value, oninput: e => update(e.target.value), spellcheck: f.type === 'text' });
     const input = el('input', { type: 'text', value: f.value, oninput: e => update(e.target.value) });
@@ -342,11 +482,11 @@
     return el(
       'header',
       { className: 'main-head' },
-      el('span', { className: 'big' }, icon(cat ? cat.icon : 'file')),
+      el('span', { className: 'big' }, icon(d.asset.kind === 'mcp' && SOURCES[d.asset.source] ? SOURCES[d.asset.source].icon : cat ? cat.icon : 'file')),
       el(
         'div',
         { className: 'title' },
-        el('h1', {}, d.asset.name, el('span', { className: 'tag' }, cat ? cat.label.replace(/s$/, '') : d.asset.kind), d.asset.scope !== 'global' && viewOf(d.asset.scope) ? el('span', { className: 'tag scope', title: viewOf(d.asset.scope).path }, icon('repo'), viewOf(d.asset.scope).label) : null, dirty ? el('span', { className: 'dirty', title: 'Unsaved changes' }) : null),
+        el('h1', {}, labelOf(d.asset), el('span', { className: 'tag' }, cat ? cat.label.replace(/s$/, '') : d.asset.kind), d.asset.scope !== 'global' && viewOf(d.asset.scope) ? el('span', { className: 'tag scope', title: viewOf(d.asset.scope).path }, icon('repo'), viewOf(d.asset.scope).label) : null, dirty ? el('span', { className: 'dirty', title: 'Unsaved changes' }) : null),
         el('div', { className: 'path', title: d.asset.file }, d.asset.file)
       ),
       el(
@@ -423,6 +563,8 @@
           })
         )
       );
+    } else if (d.mode === 'mcp') {
+      body.append(renderMcp(d));
     } else if (d.mode === 'plugin') {
       body.append(
         el(
@@ -440,10 +582,52 @@
     return el('section', { className: 'main' }, headNode, body);
   }
 
+  function renderMcp(d) {
+    const a = d.asset;
+    const repo = a.scope !== 'global' && viewOf(a.scope);
+    const info = state.mcpInfo[a.id];
+    const facts = [
+      ['Source', el('span', {}, icon(SOURCES[a.source] ? SOURCES[a.source].icon : 'server'), ' ', SOURCES[a.source] ? SOURCES[a.source].label : 'Config')],
+      pluginOf(a) ? ['Plugin', pluginOf(a)] : null,
+      ['Name in Claude', a.name],
+      a.target ? ['Address', a.target] : null,
+      a.status ? ['Status', a.status] : null,
+    ].filter(Boolean);
+    const box = el('div', { className: 'mcp' });
+    box.append(
+      el(
+        'div',
+        { className: 'switch' },
+        el('input', { type: 'checkbox', id: 'mcp-enabled', checked: a.enabled !== false, onchange: () => command('toggleMcp', { id: a.id }) }),
+        el('label', { for: 'mcp-enabled' }, repo ? `Enabled in ${repo.label}` : 'Enabled in every folder'),
+        !repo && a.offIn ? el('span', { className: 'desc' }, `Off in ${a.offIn} of ${a.folders} folders. Switch on to enable it everywhere.`) : null
+      ),
+      el('div', { className: 'facts' }, facts.map(([k, v]) => [el('span', { className: 'key' }, k), el('span', { className: 'value' }, v)])),
+      a.about ? el('p', { className: 'about' }, a.about) : null
+    );
+    if (!info) box.append(el('div', { className: 'empty flush' }, 'Asking the server for its tools...'));
+    else if (info.error) box.append(el('div', { className: 'empty flush' }, info.error));
+    else {
+      if (info.server) box.append(el('div', { className: 'group-label' }, [info.server, info.version].filter(Boolean).join(' ')));
+      if (info.instructions) box.append(el('p', { className: 'about' }, info.instructions));
+      box.append(
+        el('div', { className: 'group-label' }, `Tools (${(info.tools || []).length})`),
+        el(
+          'div',
+          { className: 'tool-list' },
+          (info.tools || []).map(t => el('div', { className: 'tool' }, el('span', { className: 'name' }, t.name), t.description ? el('span', { className: 'desc' }, t.description) : null))
+        )
+      );
+    }
+    if (d.body) box.append(el('div', { className: 'group-label' }, 'Config'), el('pre', { className: 'json' }, d.body));
+    return box;
+  }
+
   const clone = d => ({ fields: d.fields.map(f => Object.assign({}, f)), body: d.body });
 
   function renderMain() {
-    const main = state.detail ? renderDetail() : renderOverview();
+    const repo = state.repo && viewOf(state.repo);
+    const main = state.detail ? renderDetail() : repo ? renderRepo(repo) : renderOverview();
     const current = app.querySelector('.main');
     current ? current.replaceWith(main) : app.append(main);
   }
@@ -464,6 +648,16 @@
       const current = app.querySelector('.sidebar');
       current ? current.replaceWith(sidebar) : render();
       app.querySelector('.list').scrollTop = scroll;
+      if (current && !state.detail && state.repo) renderMain();
+    } else if (m.type === 'mcpInfo') {
+      state.mcpInfo[m.id] = m.info;
+      if (state.detail && state.detail.asset.id === m.id) renderMain();
+    } else if (m.type === 'tools') {
+      if (!state.draft || !state.detail || state.detail.asset.id !== m.id) return;
+      const f = state.draft.fields.find(x => x.key === m.key);
+      if (!f) return;
+      f.value = m.value;
+      renderMain();
     } else if (m.type === 'detail') {
       if (m.external && isDirty()) return;
       if (m.external && m.detail && state.detail && snapshot(m.detail) === snapshot(state.detail) && m.detail.asset.enabled === state.detail.asset.enabled) return;

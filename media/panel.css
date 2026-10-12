@@ -465,6 +465,11 @@ pre.json {
   background: var(--vscode-list-hoverBackground);
 }
 
+.repo-head.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
 .repo-head .label {
   flex: 1;
   overflow: hidden;
@@ -503,4 +508,90 @@ pre.json {
 .logo-lg {
   width: 24px;
   height: 24px;
+}
+
+.tools-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.tools-field textarea.tools {
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  font-family: var(--vscode-editor-font-family);
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+button.link:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+select.sort {
+  width: auto;
+  padding: 0 2px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 4px 10px;
+}
+
+.facts .key {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.facts .value {
+  overflow-wrap: anywhere;
+}
+
+.mcp .about {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool .name {
+  font-family: var(--vscode-editor-font-family);
+}
+
+.tool .desc {
+  color: var(--vscode-descriptionForeground);
+  white-space: pre-wrap;
 }
