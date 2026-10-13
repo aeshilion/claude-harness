@@ -2,6 +2,8 @@
 
 Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.
 
+![Claude Harness in action](docs/images/harness-demo.gif)
+
 ## Quick start
 
 1. Open the Extensions view (Ctrl+Shift+X), search for **Claude Harness**, and click **Install**. You can also run `code --install-extension integrations-at.claude-harness` in a terminal.
@@ -28,5 +30,3 @@ Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, s
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0, (c) 2026 Alexander Kastil, [integrations.at](https://integrations.at). See [LICENSE](LICENSE).
-
-<a href="https://integrations.at/"><img src="https://media.integrations.at/images/header-logo-245x36.webp" alt="integrations.at" width="160"></a>

@@ -181,6 +181,69 @@
       "catalogue": {
         "action": "none"
       }
+    },
+    {
+      "date": "2026-10-12",
+      "from": "19:26",
+      "to": "20:42",
+      "sessionId": "2a6aa24c-657f-48bd-a231-9e3e5e455339",
+      "branch": "master",
+      "commits": [
+        "6bd5df4",
+        "1b394b8"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "src/probe.ts",
+        "src/panel.ts",
+        "src/harness.ts",
+        "src/extension.ts",
+        "media/panel.js",
+        "docs/commands.md"
+      ],
+      "mechanism": {
+        "takes": "the MCP server, plugin and settings configuration a coding agent reads from user and repository files",
+        "does": "starts or calls each configured tool server to list its tools, reuses the agent's stored sign-in tokens for protected servers, and offers add, copy-as-command, delete, install and uninstall actions that write the same files or run the agent's own CLI",
+        "returns": "a browsable inventory with each server's tool names, sign-in state and config, and file edits or terminal commands for every change"
+      },
+      "portsAsIs": [
+        "stdio and HTTP tool-server probe",
+        "stored-token reuse for protected servers",
+        "config entry add and remove that keeps the rest of the file intact",
+        "mock-page screenshots for docs with no private data"
+      ],
+      "perCustomer": [
+        "which agent CLI and config files are read",
+        "marketplace catalogs"
+      ],
+      "evidence": [
+        "angular-cli stdio probe listed 9 tools",
+        "addMcpServer and removeJsonEntry checked on scratch files",
+        "Marketplace shows integrations-at.claude-harness 0.1.26, pipeline run 312 succeeded",
+        "tests: 13 unit tests pass"
+      ],
+      "toolchain": {
+        "skills": [
+          "plugin-authoring",
+          "publish-vscode-ext",
+          "learn-loop-plugin:claude-learn",
+          "learn-loop-harvest-plugin:claude-learn-harvest",
+          "learn-loop-worktime-plugin:claude-learn-worktime"
+        ],
+        "mcpServers": [
+          "claude_ai_Microsoft_365"
+        ],
+        "agents": [
+          "docs-agent"
+        ]
+      },
+      "industry": "software teams using AI coding agents",
+      "status": "Live",
+      "catalogue": {
+        "action": "none"
+      }
     }
   ]
 }

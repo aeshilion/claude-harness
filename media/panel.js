@@ -8,6 +8,7 @@
     repo: undefined,
     draft: undefined,
     filter: saved.filter || '',
+    overviewFilter: '',
     expanded: new Set(saved.expanded || []),
     mcpSort: saved.mcpSort || 'name',
     mcpInfo: {},
@@ -251,6 +252,45 @@
       .filter(a => ['memory', 'rule', 'agent', 'skill', 'command', 'outputStyle', 'workflow'].includes(a.kind))
       .sort((a, b) => b.mtime - a.mtime)
       .slice(0, 12);
+    const results = el('div', { className: 'recent' });
+    const showResults = () => {
+      const q = state.overviewFilter.toLowerCase();
+      const hits = q ? all.filter(a => matches(a, q)) : [];
+      results.replaceChildren(
+        ...(q
+          ? [
+              el('div', { className: 'group-label' }, `Results (${hits.length})`),
+              hits.length
+                ? hits.map(a =>
+                    el(
+                      'div',
+                      { className: 'row', title: a.description, onclick: () => select(a.id) },
+                      icon(a.icon),
+                      el('span', { className: 'name' }, labelOf(a)),
+                      el('span', { className: 'desc' }, [a.scopeLabel, a.kind === 'mcp' ? mcpDesc(a) : a.description].filter(Boolean).join(' · '))
+                    )
+                  )
+                : el('div', { className: 'empty flush' }, 'No matches'),
+            ]
+          : []
+        ).flat()
+      );
+      results.hidden = !q;
+    };
+    showResults();
+    const search = el(
+      'div',
+      { className: 'overview-search' },
+      el('input', {
+        type: 'search',
+        placeholder: 'Search harness elements',
+        value: state.overviewFilter,
+        oninput: e => {
+          state.overviewFilter = e.target.value;
+          showResults();
+        },
+      })
+    );
     return el(
       'section',
       { className: 'main' },
@@ -282,6 +322,8 @@
             )
           )
         ),
+        search,
+        results,
         repos.length
           ? el(
               'div',
