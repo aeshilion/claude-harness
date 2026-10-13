@@ -121,7 +121,7 @@
         ]
       },
       "industry": "software development tooling",
-      "status": "Built and running in-house, Marketplace release prepared",
+      "status": "Built and running in-house",
       "catalogue": {
         "action": "none"
       }
@@ -241,6 +241,50 @@
       },
       "industry": "software teams using AI coding agents",
       "status": "Live",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-13",
+      "from": "10:21",
+      "to": "10:44",
+      "sessionId": "13808666-5fd8-4a2c-8c82-23be5cf0e6f7",
+      "branch": "master",
+      "commits": [],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js"
+      ],
+      "mechanism": {
+        "takes": "a free-text query typed on the extension's overview page",
+        "does": "filters every configuration item of the global setup and of every registered repository by name, description and about text, and lists the hits with their kind icon, owning scope and description",
+        "returns": "a clickable result list that opens the chosen item in the editor pane"
+      },
+      "portsAsIs": [
+        "cross-scope search over an in-memory item tree",
+        "live result list that updates without re-rendering the page"
+      ],
+      "perCustomer": [
+        "the item kinds and fields searched"
+      ],
+      "evidence": [
+        "claude-harness-0.1.28.vsix installed in VS Code",
+        "tasks/lessons.md: nested-array replaceChildren defect fixed in 0.1.28"
+      ],
+      "toolchain": {
+        "skills": [
+          "claude-learn",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": []
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
       "catalogue": {
         "action": "none"
       }
