@@ -19,6 +19,7 @@ import {
   KINDS,
   expandRepoFolders,
   knownRepos,
+  linkCopies,
   McpSource,
   applyMcpState,
   parseMcpList,
@@ -100,6 +101,7 @@ export function activate(context: vscode.ExtensionContext): void {
       globalMcp.items.push(...cliServers.filter(c => !globalMcp.items.some(a => a.name === c.name)).map(c => ({ ...c })));
     }
     applyMcpState(views, global.userConfig);
+    linkCopies(views);
     for (const a of views.flatMap(v => v.categories.find(c => c.kind === 'plugin')?.items ?? [])) if (pluginIsMod(global.root, a.name)) a.description += ' · mod';
     tree.setCategories(views[0].categories);
     HarnessPanel.update();
@@ -332,6 +334,25 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!name) return;
       let file = '';
       if (run(() => (file = duplicateAsset(scopeOf(asset), asset, name)))) showFile(file);
+    }),
+
+    vscode.commands.registerCommand('claudeHarness.compare', async (arg?: unknown) => {
+      const asset = assetOf(arg);
+      if (!asset) return;
+      if (!asset.copies?.length) {
+        void vscode.window.showInformationMessage(`${asset.name} has no copy in another scope.`);
+        return;
+      }
+      const copy =
+        asset.copies.length === 1
+          ? asset.copies[0]
+          : (await vscode.window.showQuickPick(
+              asset.copies.map(c => ({ label: c.label, description: c.same ? 'identical' : 'differs', detail: c.file, copy: c })),
+              { title: `Compare ${asset.name} with` }
+            ))?.copy;
+      if (!copy) return;
+      const label = views.find(v => v.id === asset.scope)?.label ?? asset.scope;
+      await vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(asset.file), vscode.Uri.file(copy.file), `${asset.name}: ${label} ↔ ${copy.label}`);
     }),
 
     vscode.commands.registerCommand('claudeHarness.delete', async (arg?: unknown) => {

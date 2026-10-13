@@ -45,6 +45,7 @@
     a.kind !== 'mcp' ? a.name : a.source === 'claude.ai' ? a.name.replace(/^claude\.ai /, '') : a.source === 'plugin' ? a.name.split(':').slice(2).join(':') : a.name;
   const pluginOf = a => (a.source === 'plugin' ? a.name.split(':')[1] : '');
   const mcpDesc = a => [pluginOf(a) && `${pluginOf(a)} plugin`, a.enabled === false ? 'off' : a.offIn ? `off in ${a.offIn} folders` : '', a.status || a.target].filter(Boolean).join(' · ');
+  const assetDesc = a => [a.version && `v${a.version}`, a.copies && a.copies.length ? `also in ${a.copies.map(c => `${c.label} (${c.same ? 'identical' : 'differs'})`).join(', ')}` : '', a.description].filter(Boolean).join(' · ');
   const statusRank = a => (a.enabled === false ? 9 : /^connected/i.test(a.status || '') ? 0 : /auth/i.test(a.status || '') ? 1 : /not configured/i.test(a.status || '') ? 3 : 2);
   const byLabel = (a, b) => labelOf(a).localeCompare(labelOf(b)) || a.name.localeCompare(b.name);
   const SORTS = {
@@ -142,7 +143,7 @@
         const selected = state.detail && state.detail.asset.id === a.id;
         const glyph = a.kind === 'plugin' ? (a.enabled ? 'pass-filled' : 'circle-large-outline') : a.kind === 'mcp' && SOURCES[a.source] ? SOURCES[a.source].icon : cat.icon;
         const off = (a.kind === 'plugin' || a.kind === 'mcp') && a.enabled === false;
-        const desc = a.kind === 'mcp' ? mcpDesc(a) : a.description;
+        const desc = a.kind === 'mcp' ? mcpDesc(a) : assetDesc(a);
         list.append(
           el(
             'div',
@@ -267,7 +268,7 @@
                       { className: 'row', title: a.description, onclick: () => select(a.id) },
                       icon(a.icon),
                       el('span', { className: 'name' }, labelOf(a)),
-                      el('span', { className: 'desc' }, [a.scopeLabel, a.kind === 'mcp' ? mcpDesc(a) : a.description].filter(Boolean).join(' · '))
+                      el('span', { className: 'desc' }, [a.scopeLabel, a.kind === 'mcp' ? mcpDesc(a) : assetDesc(a)].filter(Boolean).join(' · '))
                     )
                   )
                 : el('div', { className: 'empty flush' }, 'No matches'),

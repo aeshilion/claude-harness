@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { Asset, Category } from './harness';
+import { Asset, Category, copiesText } from './harness';
 
 export type Node =
   | { type: 'category'; category: Category }
@@ -57,8 +57,8 @@ export class HarnessTree implements vscode.TreeDataProvider<Node> {
       const { asset } = node;
       const item = new vscode.TreeItem(asset.name, asset.kind === 'skill' && (asset.files?.length ?? 0) > 1 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.id = asset.id;
-      item.description = asset.description;
-      item.tooltip = new vscode.MarkdownString(`**${asset.name}**\n\n${asset.description}\n\n\`${asset.file}\``);
+      item.description = [asset.version && `v${asset.version}`, copiesText(asset), asset.description].filter(Boolean).join(' · ');
+      item.tooltip = new vscode.MarkdownString(`**${asset.name}**\n\n${asset.description}\n\n\`${asset.file}\`${asset.copies?.length ? `\n\n${copiesText(asset)}` : ''}`);
       item.iconPath =
         asset.kind === 'plugin'
           ? new vscode.ThemeIcon(asset.enabled ? 'pass-filled' : 'circle-large-outline', asset.enabled ? new vscode.ThemeColor('testing.iconPassed') : undefined)

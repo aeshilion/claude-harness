@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import { applyMcpState, parseMcpList, mcpToolPrefix, setMcpEnabled } from '../../src/harness';
-import { createAsset, duplicateAsset, expandRepoFolders, fromFields, globalScope, knownRepos, readMarkdown, renameAsset, repoScope, scan, serializeMarkdown, setFrontmatterList, setPluginEnabled, toFields } from '../../src/harness';
+import { createAsset, duplicateAsset, expandRepoFolders, fromFields, globalScope, knownRepos, linkCopies, readMarkdown, renameAsset, repoScope, scan, serializeMarkdown, setFrontmatterList, setPluginEnabled, toFields } from '../../src/harness';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-'));
@@ -23,6 +23,25 @@ function fixture() {
   fs.writeFileSync(userConfig, JSON.stringify({ mcpServers: { github: { type: 'http', url: 'https://x' } } }));
   return { ...globalScope(root), mcpFile: userConfig };
 }
+
+test('linkCopies marks same-name assets across scopes as identical or differing', () => {
+  const global = fixture();
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-repo-'));
+  const write = (rel: string, text: string) => {
+    fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
+    fs.writeFileSync(path.join(repo, rel), text);
+  };
+  write('.claude/skills/hugo/SKILL.md', '---\r\nname: hugo\r\ndescription: Hugo engine\r\n---\r\n\r\n# Hugo\r\n');
+  write('.claude/skills/hugo/references/traps.md', '# Traps\r\n');
+  write('.claude/agents/dotnet-expert.md', '---\nname: dotnet-expert\nmetadata:\n  version: "2.0.0"\n---\n');
+  const views = [global, repoScope(repo)].map(s => ({ id: s.id, label: s.label, path: s.base, categories: scan(s) }));
+  linkCopies(views);
+  const item = (view: number, kind: string, name: string) => views[view].categories.find(c => c.kind === kind)!.items.find(a => a.name === name)!;
+  assert.deepEqual(item(0, 'skill', 'hugo').copies!.map(c => c.same), [true]);
+  assert.deepEqual(item(1, 'agent', 'dotnet-expert').copies!.map(c => c.same), [false]);
+  assert.equal(item(1, 'agent', 'dotnet-expert').version, '2.0.0');
+  assert.equal(item(0, 'command', 'git:push').copies, undefined);
+});
 
 test('scan finds every kind', () => {
   const paths = fixture();

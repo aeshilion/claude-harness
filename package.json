@@ -2,7 +2,7 @@
   "name": "claude-harness",
   "displayName": "Claude Harness",
   "description": "Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "publisher": "integrations-at",
   "license": "CC-BY-NC-SA-4.0",
   "icon": "media/icon.png",
@@ -150,6 +150,12 @@
         "icon": "$(copy)"
       },
       {
+        "command": "claudeHarness.compare",
+        "title": "Compare with Copy...",
+        "category": "Claude Harness",
+        "icon": "$(diff)"
+      },
+      {
         "command": "claudeHarness.delete",
         "title": "Delete",
         "category": "Claude Harness",
@@ -264,6 +270,11 @@
           "group": "2_edit@2"
         },
         {
+          "command": "claudeHarness.compare",
+          "when": "view == claudeHarness.tree && viewItem =~ /^asset[.](agent|skill|command|outputStyle|rule|workflow)$/",
+          "group": "2_edit@3"
+        },
+        {
           "command": "claudeHarness.delete",
           "when": "view == claudeHarness.tree && viewItem =~ /^asset[.](agent|skill|command|outputStyle|rule|workflow)$/",
           "group": "3_delete@1"
@@ -314,6 +325,10 @@
         },
         {
           "command": "claudeHarness.duplicate",
+          "when": "false"
+        },
+        {
+          "command": "claudeHarness.compare",
           "when": "false"
         },
         {

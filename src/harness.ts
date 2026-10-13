@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -81,6 +82,16 @@ export interface Asset {
   status?: string;
   offIn?: number;
   folders?: number;
+  version?: string;
+  copies?: Copy[];
+}
+
+export interface Copy {
+  id: string;
+  scope: string;
+  label: string;
+  file: string;
+  same: boolean;
 }
 
 export type McpSource = 'user' | 'local' | 'project' | 'claude.ai' | 'plugin';
@@ -413,13 +424,55 @@ function listFiles(dir: string, filter: (name: string) => boolean, recursive: bo
   return out.sort((a, b) => a.localeCompare(b));
 }
 
+export function versionOf(data: Record<string, unknown>): string | undefined {
+  const meta = data.metadata && typeof data.metadata === 'object' ? (data.metadata as Record<string, unknown>) : {};
+  const value = data.version ?? meta.version;
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+}
+
 function markdownAssets(scope: HarnessScope, dir: string, kind: Kind, recursive: boolean, nameOf: (rel: string) => string): Asset[] {
   return listFiles(dir, n => n.toLowerCase().endsWith('.md'), recursive).map(rel => {
     const file = path.join(dir, rel);
     const name = nameOf(rel);
-    return { id: `${scope.id}|${kind}:${name}`, scope: scope.id, kind, name, description: oneLine(readMarkdown(file).data.description), file, mtime: mtimeOf(file) };
+    const { data } = readMarkdown(file);
+    return { id: `${scope.id}|${kind}:${name}`, scope: scope.id, kind, name, description: oneLine(data.description), version: versionOf(data), file, mtime: mtimeOf(file) };
   });
 }
+
+const COPYABLE = new Set<Kind>(['rule', 'agent', 'skill', 'command', 'outputStyle', 'workflow']);
+
+export function contentHash(asset: Asset): string {
+  const hash = crypto.createHash('sha256');
+  const add = (file: string) => hash.update(fs.readFileSync(file).toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
+  if (asset.dir) {
+    for (const rel of [...(asset.files ?? [])].sort()) {
+      hash.update(`\0${rel}\0`);
+      add(path.join(asset.dir, ...rel.split('/')));
+    }
+  } else add(asset.file);
+  return hash.digest('hex');
+}
+
+export function linkCopies(views: ScopeView[]): void {
+  const groups = new Map<string, { asset: Asset; label: string }[]>();
+  for (const view of views)
+    for (const category of view.categories)
+      for (const asset of category.items) {
+        if (!COPYABLE.has(asset.kind)) continue;
+        const key = `${asset.kind}:${asset.name}`;
+        groups.set(key, [...(groups.get(key) ?? []), { asset, label: view.label }]);
+      }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const hashes = new Map(group.map(g => [g.asset.id, contentHash(g.asset)]));
+    for (const { asset } of group)
+      asset.copies = group
+        .filter(g => g.asset !== asset)
+        .map(g => ({ id: g.asset.id, scope: g.asset.scope, label: g.label, file: g.asset.file, same: hashes.get(g.asset.id) === hashes.get(asset.id) }));
+  }
+}
+
+export const copiesText = (asset: Asset): string => (asset.copies?.length ? `also in ${asset.copies.map(c => `${c.label} (${c.same ? 'identical' : 'differs'})`).join(', ')}` : '');
 
 const stripMd = (rel: string) => rel.replace(/\.md$/i, '').split(path.sep).join('/');
 
@@ -449,10 +502,12 @@ export function scan(scope: HarnessScope): Category[] {
       const dir = path.join(skillsDir, entry.name);
       const file = path.join(dir, 'SKILL.md');
       if (!fs.statSync(dir).isDirectory() || !fs.existsSync(file)) continue;
+      const { data } = readMarkdown(file);
       items.get('skill')!.push(
         make('skill', entry.name, {
           name: entry.name,
-          description: oneLine(readMarkdown(file).data.description),
+          description: oneLine(data.description),
+          version: versionOf(data),
           file,
           dir,
           files: listFiles(dir, () => true, true).map(f => f.split(path.sep).join('/')),
