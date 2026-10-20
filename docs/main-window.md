@@ -32,9 +32,9 @@ The sidebar has a search box and five buttons in its header:
 
 The search box filters every section by name and description.
 
-Below the global sections, the **Repositories** group lists each repo, with its check badge. Click a repo to open its page. Its chevron expands its sections. Use the buttons on the group header to add or remove repos. See [Repositories](repositories.md).
+Below the global sections, the **Repositories** group lists each repo. Click a repo to open its page. Its chevron expands its sections. When a repo is open, its sections start with a **Sessions** node, above **Memory**, with its count. Click the label or the search icon to open the [Sessions page](sessions.md#sessions-page). Use the buttons on the group header to add or remove repos. See [Repositories](repositories.md).
 
-A repo page has these parts, from top to bottom: one tile for each section, **Recently changed**, **Harness standard** and **Effective harness**. The page header also has buttons to check the repo, fix its settings and hooks, init a product repo and create an item in it. See [Harness standard](harness-standard.md), [Effective harness](effective-harness.md) and [Init product repo](init-product-repo.md).
+A repo page has these parts, from top to bottom: one tile for each section, **Recently changed** and **Effective harness**. The page header has a button to create an item in the repo. See [Effective harness](effective-harness.md). Provider features appear when a harness standard provider plugin is installed.
 
 ## Overview
 

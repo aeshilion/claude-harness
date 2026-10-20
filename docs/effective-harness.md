@@ -8,9 +8,9 @@
 </tr>
 </table>
 
-The **Effective harness** section on a repo page lists what a Claude Code session in that repo loads. It shows the memory files, the rules, the plugins and the hooks. Each row opens its file when it has one. The section sits below the [harness standard](harness-standard.md) findings.
+The **Effective harness** section on a repo page lists what a Claude Code session in that repo loads. It shows the memory files, the rules, the plugins and the hooks. Each row opens its file when it has one. The section sits on the repo page below **Recently changed**.
 
-![Repo page scrolled to the Harness standard findings and the Effective harness section](images/repo-standard-effective.png)
+![Repo page with the Effective harness section listing memory, rules and plugins](images/repo-effective.png)
 
 ## Memory and rules
 

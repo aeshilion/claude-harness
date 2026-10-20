@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
-import { Asset, Layout, ScopeView, claudeMdText, layoutOf } from './harness';
+import { Asset, ScopeView, claudeMdText } from './harness';
 import { CheckResult, run } from './standard';
 
 const readJson = (file: string): Record<string, unknown> => {
@@ -58,10 +58,10 @@ export interface FleetRow {
   id: string;
   label: string;
   path: string;
-  layout: Layout;
+  layout?: string;
   lines: number;
-  emDashes: number;
-  check?: { fail: number; review: number; restated: number; kind: string };
+  emDashes?: number;
+  check?: { fail: number; review: number; kind: string };
   checkState: string;
   plugins: string[];
   hookCopies: number;
@@ -82,10 +82,10 @@ export function fleetRow(view: ScopeView, check: { state: string; result?: Check
     id: view.id,
     label: view.label,
     path: view.path,
-    layout: layoutOf(view.path),
+    layout: result?.layout,
     lines: text === undefined ? 0 : text.split(/\r?\n/).length - (text.endsWith('\n') ? 1 : 0),
-    emDashes: text === undefined ? 0 : text.split(/\r?\n/).filter(l => l.includes(String.fromCharCode(0x2014))).length,
-    check: result ? { fail: result.fail, review: result.review, restated: result.findings.filter(f => /restates house rule/.test(f.text)).length, kind: result.kind } : undefined,
+    emDashes: result?.metrics?.emDashes,
+    check: result ? { fail: result.fail, review: result.review, kind: result.kind } : undefined,
     checkState: check.state,
     plugins: [...new Set(enabled)].sort(),
     hookCopies: items('hookScript').filter(copied).length,

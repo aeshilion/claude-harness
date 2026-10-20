@@ -1,0 +1,15 @@
+{
+  "$comment": "Commands that belong to this repo's normal work; Intent Guard lets them through without asking. family is an Intent Guard family id, command a case-insensitive regex tested against the whole command.",
+  "allow": [
+    {
+      "family": "test-run",
+      "command": "\\bnpm (run )?test\\b",
+      "reason": "the unit tests run with every build and package"
+    },
+    {
+      "family": "process-kill",
+      "command": "^(?=.*Stop-Process)(?=.*Name='Code\\.exe')(?=.*CommandLine\\s+-like\\s+'[^']*vsc[^']*ud)",
+      "reason": "stops only the isolated VS Code test instance, the one started with --user-data-dir <scratchpad>/vsc/ud"
+    }
+  ]
+}

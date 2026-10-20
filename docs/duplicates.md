@@ -4,7 +4,7 @@
 <tr>
 <td align="left"><a href="effective-harness.md">← Back to Effective harness</a></td>
 <td align="center"></td>
-<td align="right"><a href="fix-settings.md">→ Next: Fix settings and hooks</a></td>
+<td align="right"><a href="bulk-edits.md">→ Next: Bulk-edit guard</a></td>
 </tr>
 </table>
 
@@ -33,10 +33,7 @@ A confirmation shows the identical copy, the backup path and the file that goes.
 
 ![Repo skill marked as also in Global (identical), with the Retire button in the toolbar](images/retire-copy.png)
 
-Retire is not offered in these cases:
-
-- A class repo, which has `demos/` and `labs/` folders at its root. A class repo keeps its copies.
-- A repo whose `CLAUDE.md` says that copies are kept.
+Retire is offered in every repo. A harness standard provider plugin can mark repos that keep their copies, and Retire is then hidden there.
 
 ## Retire clean copies
 
@@ -50,6 +47,6 @@ The **Delete** command still moves an item to the trash, as before. Retire does 
 <tr>
 <td align="left"><a href="effective-harness.md">← Back to Effective harness</a></td>
 <td align="center"><a href="#duplicates">↑ Back to top</a></td>
-<td align="right"><a href="fix-settings.md">→ Next: Fix settings and hooks</a></td>
+<td align="right"><a href="bulk-edits.md">→ Next: Bulk-edit guard</a></td>
 </tr>
 </table>

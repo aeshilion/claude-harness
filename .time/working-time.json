@@ -288,6 +288,302 @@
       "catalogue": {
         "action": "none"
       }
+    },
+    {
+      "date": "2026-10-13",
+      "from": "10:37",
+      "to": "12:00",
+      "sessionId": "6037824e-ab14-47da-8a69-0297f3ef204a",
+      "branch": "master",
+      "commits": [
+        "9e77c90"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "README.md",
+        "media/icon.png",
+        "docs/images/harness-demo.gif"
+      ],
+      "mechanism": {
+        "takes": "the extension's main window, its icon and the publisher's brand assets",
+        "does": "renders a short motion-graphics demo of browsing and editing the setup, embeds it at the top of the store listing, and fixes the icon so it stays visible on the store background",
+        "returns": "a published store listing with an animated demo and a visible icon"
+      },
+      "portsAsIs": [
+        "animated product demo rendered from a motion-design source",
+        "store listing that leads with the demo"
+      ],
+      "perCustomer": [
+        "the product shown in the demo",
+        "the brand assets"
+      ],
+      "evidence": [
+        "docs/images/harness-demo.gif",
+        "claude-harness 0.1.28 published to the Marketplace"
+      ],
+      "toolchain": {
+        "skills": [
+          "social"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "video-producer"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "17:46",
+      "to": "20:02",
+      "sessionId": "7d7a8807-a96d-40c7-82e1-e02fe8ea85b3",
+      "branch": "feature/harness-standard",
+      "commits": [
+        "642a941",
+        "f79cc49"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "src/standard.ts",
+        "src/constitution.ts",
+        "src/lenses.ts",
+        "src/fleet.ts",
+        "src/harness.ts",
+        "media/panel.js"
+      ],
+      "mechanism": {
+        "takes": "many repositories that each hold agent configuration (instruction files, path-scoped rules, settings, hook scripts), plus an external rules checker shipped as a plugin",
+        "does": "runs the checker per repository and places each finding on the file and line it concerns as editor diagnostics with quick fixes, shows what a session there would load with imports expanded, matches duplicated items across repositories and plugins and retires clean copies after a backup, and previews every bulk settings change as a diff behind a guard that skips repositories with uncommitted or in-use files",
+        "returns": "editor diagnostics and lenses, one table of every repository, a per-repository load view, and previewed, guarded bulk edits"
+      },
+      "portsAsIs": [
+        "external checker output mapped to editor diagnostics by file and line",
+        "dry run applied to a temporary copy, shown as a diff, then applied on confirm",
+        "bulk-edit guard: uncommitted files, active sessions, stale working copies",
+        "content-hash duplicate finder with a nearly identical state",
+        "mocked webview scenes and a workbench capture script for docs screenshots"
+      ],
+      "perCustomer": [
+        "the standard the checker enforces",
+        "the configuration kinds and their folder layout",
+        "the marketplace that ships the checker"
+      ],
+      "evidence": [
+        "test/unit/standard.test.ts",
+        "tests: 24 unit",
+        "verified in an isolated VS Code instance against 32 real repositories and a demo repository",
+        "claude-harness 0.1.30 published to the Marketplace, pipeline run 314"
+      ],
+      "toolchain": {
+        "skills": [
+          "brand-voice-integrations",
+          "artifact-design",
+          "merge-commit",
+          "publish-vscode-ext",
+          "report",
+          "vscode-extension",
+          "claude-learn",
+          "claude-learn-harvest",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "subagent-delegation-plugin:fact-gatherer",
+          "image-producer",
+          "docs-agent",
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "20:05",
+      "to": "20:36",
+      "sessionId": "7d7a8807-a96d-40c7-82e1-e02fe8ea85b3",
+      "branch": "feature/standard-provider",
+      "commits": [],
+      "surfaces": [
+        "claude-harness",
+        "integrations-marketplace"
+      ],
+      "files": [
+        "src/standard.ts",
+        "src/constitution.ts",
+        "src/extension.ts",
+        "src/harness.ts",
+        "media/panel.js",
+        "package.json",
+        "plugins/orchestration/harness-plugin/.claude-plugin/harness-standard.json"
+      ],
+      "mechanism": {
+        "takes": "a public editor extension whose features encode one organisation's own conventions, and a plugin that organisation owns",
+        "does": "moves the conventions into a manifest the plugin ships (entry points, prompts, patterns, folder rules), discovers any installed plugin carrying it, gates every command, menu, column and section on context keys, and renders provider output instead of built-in vocabulary",
+        "returns": "one public build that shows only general features to everyone and the full in-house feature set where the provider plugin is installed"
+      },
+      "portsAsIs": [
+        "provider manifest discovered among installed plugins, directory source preferred over an older cached copy",
+        "context-key gating of commands, menus and webview sections",
+        "leak check of the packaged extension for in-house names",
+        "public and provider screenshot sets from one scene generator"
+      ],
+      "perCustomer": [
+        "the conventions the manifest carries",
+        "the plugin that ships it",
+        "the public docs wording"
+      ],
+      "evidence": [
+        "tests: 23 unit",
+        "isolated VS Code runs with and without the provider",
+        "packaged extension scanned for in-house names: none"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "claude-learn",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "docs-agent",
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "20:24",
+      "to": "21:07",
+      "sessionId": "f2d34a75-532f-4ab5-bab4-3c24ef7a588b",
+      "branch": "feature/standard-provider",
+      "commits": [],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "src/sessions.ts",
+        "src/tree.ts",
+        "media/panel.js",
+        "media/panel.css",
+        "test/unit/sessions.test.ts"
+      ],
+      "mechanism": {
+        "takes": "an AI coding agent's local session records: the main transcript, each delegated helper's own transcript and metadata, completion notices and the live session registry",
+        "does": "joins every delegation to the helper run it started, its reports, follow-up messages, stops and failures, then draws one swimlane per helper on a shared time axis that shortens idle stretches, and flags helpers that failed, never reported or were sent work after reporting",
+        "returns": "a per-repository list of sessions in the editor sidebar and a page per session with the timeline, summary counts, findings and each helper's brief and report"
+      },
+      "portsAsIs": [
+        "transcript-to-delegation-timeline parser",
+        "swimlane timeline with idle-gap compression",
+        "live listing of concurrent sessions and the files each edited"
+      ],
+      "perCustomer": [
+        "which helper types and naming conventions the team uses"
+      ],
+      "evidence": [
+        "test/unit/sessions.test.ts: 4 tests, full suite 27 passing",
+        "verified in an isolated VS Code against the day's 30 real sessions: tree rows, repo page, timeline and helper details"
+      ],
+      "toolchain": {
+        "skills": [
+          "visualize-conversation",
+          "vscode-extension",
+          "context-engineering",
+          "report",
+          "list-peer-sessions",
+          "claude-learn",
+          "claude-learn-harvest",
+          "claude-learn-worktime",
+          "track-time",
+          "publish-vscode-ext"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "subagent-delegation-plugin:fact-gatherer",
+          "docs-agent",
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "20:46",
+      "to": "21:32",
+      "sessionId": "5d8f3cb5-cd9a-4fe5-ad05-5547c8801756",
+      "branch": "feature/standard-provider",
+      "commits": [],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js",
+        "media/panel.css",
+        "docs/images/marketplace-health.png",
+        "docs/images/claude-md-lenses.png"
+      ],
+      "mechanism": {
+        "takes": "a product's docs pages and the screenshots they embed",
+        "does": "renders webview scenes from the real panel code with neutral demo data, captures editor features from a throwaway editor instance with its own profile and an empty home folder, and checks every visible marker in each frame against what its page explains",
+        "returns": "docs images free of the author's private setup, side panels and stray errors, plus a guard exception that lets the tooling start and stop those instances without prompts while other process kills stay held"
+      },
+      "portsAsIs": [
+        "isolated editor instance start and stop script",
+        "framing rules for docs screenshots",
+        "guard exception keyed on a scratch path the procedure controls"
+      ],
+      "perCustomer": [
+        "the demo data each scene shows",
+        "the docs pages being illustrated"
+      ],
+      "evidence": [
+        "docs/images/claude-md-lenses.png: one lens, 0 errors, side bars, Chat and minimap off",
+        "docs/images/marketplace-health.png: source type as an icon after the Source label",
+        "intent-guard tests: 23 pass",
+        "isolated-vscode.ps1: started=True pages=1, then stopped=9 listening=False"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "report",
+          "claude-learn",
+          "claude-learn-harvest",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "docs-agent"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
     }
   ]
 }

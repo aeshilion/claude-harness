@@ -2,7 +2,7 @@
   "name": "claude-harness",
   "displayName": "Claude Harness",
   "description": "Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.",
-  "version": "0.1.30",
+  "version": "0.2.0",
   "publisher": "integrations-at",
   "license": "CC-BY-NC-SA-4.0",
   "icon": "media/icon.png",
@@ -223,7 +223,7 @@
       },
       {
         "command": "claudeHarness.checkRepos",
-        "title": "Check Harness Standard",
+        "title": "Check Harness",
         "category": "Claude Harness",
         "icon": "$(checklist)"
       },
@@ -234,8 +234,8 @@
         "icon": "$(wrench)"
       },
       {
-        "command": "claudeHarness.initRepo",
-        "title": "Init Product Repo...",
+        "command": "claudeHarness.scaffoldRepo",
+        "title": "Scaffold Repo Harness...",
         "category": "Claude Harness",
         "icon": "$(new-folder)"
       },
@@ -270,6 +270,12 @@
         "icon": "$(repo)"
       },
       {
+        "command": "claudeHarness.showSession",
+        "title": "Open Session",
+        "category": "Claude Harness",
+        "icon": "$(type-hierarchy-sub)"
+      },
+      {
         "command": "claudeHarness.removeLine",
         "title": "Remove Line",
         "category": "Claude Harness"
@@ -278,6 +284,12 @@
         "command": "claudeHarness.repoint",
         "title": "Repoint...",
         "category": "Claude Harness"
+      },
+      {
+        "command": "claudeHarness.alignClaudeMd",
+        "title": "Align CLAUDE.md...",
+        "category": "Claude Harness",
+        "icon": "$(wand)"
       }
     ],
     "menus": {
@@ -386,7 +398,7 @@
         },
         {
           "command": "claudeHarness.checkRepos",
-          "when": "view == claudeHarness.tree && viewItem =~ /^repos?$/",
+          "when": "view == claudeHarness.tree && viewItem =~ /^repos?$/ && claudeHarness.standard",
           "group": "inline@1"
         },
         {
@@ -396,7 +408,7 @@
         },
         {
           "command": "claudeHarness.fixSettings",
-          "when": "view == claudeHarness.tree && viewItem =~ /^repos?$/",
+          "when": "view == claudeHarness.tree && viewItem =~ /^repos?$/ && claudeHarness.fix",
           "group": "1_standard@1"
         },
         {
@@ -415,14 +427,19 @@
           "group": "0_open@1"
         },
         {
-          "command": "claudeHarness.initRepo",
-          "when": "view == claudeHarness.tree && viewItem == repo",
+          "command": "claudeHarness.scaffoldRepo",
+          "when": "view == claudeHarness.tree && viewItem == repo && claudeHarness.scaffold",
           "group": "1_standard@2"
         },
         {
           "command": "claudeHarness.showMarketplaces",
           "when": "view == claudeHarness.tree && viewItem == category.plugin",
           "group": "inline@2"
+        },
+        {
+          "command": "claudeHarness.alignClaudeMd",
+          "when": "view == claudeHarness.tree && viewItem == repo && claudeHarness.align",
+          "group": "1_standard@3"
         }
       ],
       "commandPalette": [
@@ -471,12 +488,36 @@
           "when": "false"
         },
         {
+          "command": "claudeHarness.showSession",
+          "when": "false"
+        },
+        {
           "command": "claudeHarness.removeLine",
           "when": "false"
         },
         {
           "command": "claudeHarness.repoint",
           "when": "false"
+        },
+        {
+          "command": "claudeHarness.checkRepos",
+          "when": "claudeHarness.standard"
+        },
+        {
+          "command": "claudeHarness.openStandard",
+          "when": "claudeHarness.standard"
+        },
+        {
+          "command": "claudeHarness.fixSettings",
+          "when": "claudeHarness.fix"
+        },
+        {
+          "command": "claudeHarness.scaffoldRepo",
+          "when": "claudeHarness.scaffold"
+        },
+        {
+          "command": "claudeHarness.alignClaudeMd",
+          "when": "claudeHarness.align"
         }
       ]
     },

@@ -11,16 +11,16 @@ import {
   globalScope,
   globToRegExp,
   importsOf,
-  layoutOf,
   linkCopies,
   memoryTree,
   pointerTokens,
   repoScope,
   retireAsset,
   retireBlock,
+  ruleInfo,
   scan,
 } from '../../src/harness';
-import { findingCode, initArgs, parseCheckJson, parseCheckText, parseFixOutput, parseInitOutput, problemsOf } from '../../src/standard';
+import { findProvider, parseCheckJson, parseFixOutput, parseScaffoldOutput, problemsOf, providerAt, scaffoldArgs } from '../../src/standard';
 
 const tmp = (prefix: string) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 const writer = (root: string) => (rel: string, text: string) => {
@@ -28,48 +28,59 @@ const writer = (root: string) => (rel: string, text: string) => {
   fs.writeFileSync(path.join(root, rel), text);
 };
 
-test('parseCheckJson reads the JSON line and parseCheckText the text lines', () => {
-  const json = parseCheckJson('{"repo": "r", "kind": "product", "fail": 1, "review": 1, "findings": [{"level": "FAIL", "text": "FAIL pointer not found: docs/x.md", "locations": [{"file": "CLAUDE.md", "line": 8, "token": "docs/x.md"}]}]}\n');
-  assert.equal(json?.fail, 1);
-  assert.equal(json?.findings[0].locations[0].line, 8);
-  assert.equal(parseCheckJson('usage: error'), undefined);
-  const text = parseCheckText(
-    'FAIL .claude/settings.json repeats marketplace claude-mods\nREVIEW line 7 restates house rule \'commit or push\'\nFAIL pointer not found: docs/x.md\nrepo=r kind=class fail=2 review=1\n'
-  );
-  assert.equal(text.kind, 'class');
-  assert.deepEqual(
-    text.findings.map(f => f.locations[0]),
-    [{ file: '.claude/settings.json', line: null }, { file: 'CLAUDE.md', line: 7 }, { file: 'CLAUDE.md', line: null, token: 'docs/x.md' }]
-  );
+test('a plugin with a harness-standard manifest is the provider; one without is ignored', () => {
+  const plain = tmp('harness-plain-');
+  writer(plain)('.claude-plugin/plugin.json', '{ "name": "plain" }');
+  const prov = tmp('harness-prov-');
+  writer(prov)('scripts/check.py', '');
+  writer(prov)('.claude-plugin/harness-standard.json', '{ "name": "demo standard", "check": "scripts/check.py", "fix": "scripts/fix.py", "align": "/demo:align", "ownerPattern": "^Owner: (\\\\S+)" }');
+  assert.equal(providerAt(plain), undefined);
+  const found = findProvider([{ dir: plain, installed: true }, { dir: prov, installed: true }]);
+  assert.equal(found?.name, 'demo standard');
+  assert.equal(found?.check, path.join(prov, 'scripts', 'check.py'));
+  assert.equal(found?.align, '/demo:align');
+  assert.equal(found?.scaffold, undefined);
+  writer(prov)('.claude/rules/api.md', '---\npaths: src/**\n---\nOwner: dotnet-expert\n');
+  const rule = scan(repoScope(prov)).find(c => c.kind === 'rule')!.items[0];
+  const roster = { skills: new Set<string>(), agents: new Set(['dotnet-expert']) };
+  assert.equal(ruleInfo(rule, prov, roster, found?.ownerPattern).owner, 'dotnet-expert');
+  assert.equal(ruleInfo(rule, prov, roster).owner, undefined);
 });
 
-test('problemsOf places a finding on its file and line, searching for a token without a line', () => {
-  const result = parseCheckText('FAIL pointer not found: docs/x.md\nREVIEW line 3 restates house rule \'no docs\'\nFAIL lines=130 cap=120\nrepo=r kind=product fail=2 review=1\n');
-  const problems = problemsOf(result, 'D:\\r', (_f, token) => (token === 'docs/x.md' ? 5 : undefined));
+test('parseCheckJson and problemsOf place each finding on its file and line', () => {
+  const json = parseCheckJson(
+    '{"repo": "r", "kind": "product", "layout": "router", "metrics": {"lines": 40, "emDashes": 1}, "fail": 1, "review": 1, "findings": [' +
+      '{"level": "FAIL", "code": "pointer", "text": "FAIL pointer not found: docs/x.md", "locations": [{"file": "CLAUDE.md", "line": null, "token": "docs/x.md"}]},' +
+      '{"level": "REVIEW", "code": "restated", "text": "REVIEW line 3 restates a rule", "locations": [{"file": "CLAUDE.md", "line": 3}]},' +
+      '{"level": "FAIL", "text": "FAIL other", "locations": [{"file": ".claude/settings.json", "line": null}]}]}\n'
+  );
+  assert.equal(json?.layout, 'router');
+  assert.equal(json?.metrics?.emDashes, 1);
+  assert.equal(parseCheckJson('usage: error'), undefined);
+  const problems = problemsOf(json!, 'D:\\r', (_f, token) => (token === 'docs/x.md' ? 5 : undefined));
   assert.deepEqual(
     problems.map(p => [path.basename(p.file), p.line, p.code]),
     [
       ['CLAUDE.md', 4, 'pointer'],
       ['CLAUDE.md', 2, 'restated'],
-      ['CLAUDE.md', 0, 'lines'],
+      ['settings.json', 0, 'standard'],
     ]
   );
-  assert.equal(findingCode("REVIEW line 10 boilerplate section 'Delegation'"), 'boilerplate');
 });
 
-test('fix and init output parse into change lines and files', () => {
+test('fix and scaffold output parse into change lines and files', () => {
   assert.deepEqual(parseFixOutput('settings.json: drop a@m (enabled globally)\ndelete .claude/hooks/steer.sh\nrepo=r changes=2 dry-run\n'), {
     changes: ['settings.json: drop a@m (enabled globally)', 'delete .claude/hooks/steer.sh'],
     count: 2,
   });
-  assert.deepEqual(parseInitOutput('create CLAUDE.md\nskip   .gitignore\ncreated=1 skipped=1 dry-run\n'), {
+  assert.deepEqual(parseScaffoldOutput('create CLAUDE.md\nskip   .gitignore\ncreated=1 skipped=1 dry-run\n'), {
     files: [
       { action: 'create', rel: 'CLAUDE.md' },
       { action: 'skip', rel: '.gitignore' },
     ],
     summary: 'created=1 skipped=1 dry-run',
   });
-  assert.deepEqual(initArgs('D:\\r', { summary: ' An API. ', areas: [{ name: 'api', globs: 'src/api/**, src/shared/**', owner: 'dotnet-expert' }, { name: '', globs: '', owner: '' }], rules: ['Port 5000', ''] }, true), [
+  assert.deepEqual(scaffoldArgs('D:\\r', { summary: ' An API. ', areas: [{ name: 'api', globs: 'src/api/**, src/shared/**', owner: 'dotnet-expert' }, { name: '', globs: '', owner: '' }], rules: ['Port 5000', ''] }, true), [
     '--root',
     'D:\\r',
     '--summary',
@@ -142,18 +153,6 @@ test('pointerTokens classifies paths, skills and agents; deadPointers checks the
   assert.deepEqual(closest('ghost-agent', roster.agents), ['ghost-agnt']);
 });
 
-test('layoutOf tells router, old template, class boilerplate, other and none apart', () => {
-  const mk = (files: Record<string, string>) => {
-    const dir = tmp('harness-lay-');
-    for (const [rel, text] of Object.entries(files)) writer(dir)(rel, text);
-    return dir;
-  };
-  assert.equal(layoutOf(mk({})), 'none');
-  assert.equal(layoutOf(mk({ 'CLAUDE.md': '## Project\n\n## Harness\n' })), 'router');
-  assert.equal(layoutOf(mk({ 'CLAUDE.md': '## Workflow Orchestration\n' })), 'old template');
-  assert.equal(layoutOf(mk({ 'CLAUDE.md': '## Layout\n', 'demos/x': '', 'labs/y': '' })), 'class boilerplate');
-  assert.equal(layoutOf(mk({ 'CLAUDE.md': '# Notes\n' })), 'other');
-});
 
 test('linkCopies marks hook scripts and plugin copies; Retire backs up a clean repo copy', () => {
   const home = tmp('harness-home-');
@@ -182,7 +181,10 @@ test('linkCopies marks hook scripts and plugin copies; Retire backs up a clean r
   assert.ok(!fs.existsSync(path.join(repo, '.claude', 'skills', 'hugo')));
   writer(repo)('demos/a', '');
   writer(repo)('labs/b', '');
-  assert.match(retireBlock(skill, repo)!, /class repo/);
+  assert.equal(retireBlock(skill, repo), undefined);
+  assert.match(retireBlock(skill, repo, { folders: ['demos', 'labs'] })!, /keeps its copies/);
+  writer(repo)('CLAUDE.md', '# Repo\n\nCopies are kept for the students.\n');
+  assert.match(retireBlock(skill, repo, { claudeMdPattern: 'copies are kept' })!, /CLAUDE.md says/);
 });
 
 test('renameInSettings rewrites @old plugin ids and the marketplace key, nothing else', () => {
