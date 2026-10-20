@@ -1226,6 +1226,55 @@ table.grid .cell {
   pointer-events: none;
 }
 
+/* Decisions: switch between the summed tree and the full timeline. */
+.dg-modes {
+  display: inline-flex;
+  gap: 2px;
+  margin: 10px 0 0 12px;
+  padding: 2px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+}
+
+.view-tab.dg-mode {
+  flex: none;
+}
+
+.dg-rail {
+  stroke: var(--vscode-panel-border);
+  stroke-width: 2;
+}
+
+.dg-rail-dot {
+  fill: var(--vscode-foreground);
+  stroke: var(--vscode-editorWidget-background);
+  stroke-width: 3;
+}
+
+.dg-rail-dot.gold {
+  fill: var(--vscode-charts-yellow);
+}
+
+.dg-fold {
+  fill: var(--vscode-descriptionForeground);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.dg-decision:hover .dg-fold {
+  fill: var(--vscode-foreground);
+}
+
+.dg-decision:focus {
+  outline: none;
+}
+
+.dg-decision:focus-visible .dg-node {
+  stroke: var(--vscode-focusBorder);
+  stroke-width: 2;
+}
+
 .dg-edge {
   fill: none;
   stroke: var(--vscode-descriptionForeground);
@@ -1642,6 +1691,216 @@ mark {
   white-space: nowrap;
   font-family: var(--vscode-editor-font-family);
   font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Decision hover: the prompts on a time rail, each with its agents and their run bars. */
+.hc-sub {
+  margin-top: -6px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-variant-numeric: tabular-nums;
+}
+
+.hc-tl {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 2px 0 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+}
+
+.hc-tl-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* The prompt marker: a dot with a halo that cuts the rail, gold when the prompt delegated. */
+.hc-tl-item::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: -20px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--vscode-foreground);
+  box-shadow: 0 0 0 3px var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background));
+}
+
+.hc-tl-item.delegated::before {
+  background: var(--vscode-charts-yellow);
+}
+
+/* The rail: from this prompt's marker down to the next one. */
+.hc-tl-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 15px;
+  bottom: -14px;
+  left: -16.5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--vscode-panel-border);
+}
+
+.hc-tl-when {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.hc-tl-time {
+  font-weight: 600;
+  color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
+}
+
+.hc-tl-gap {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  font-size: 10.5px;
+}
+
+.hc-tl-prompt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.hc-tl-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+}
+
+/* A team: a bracket ties its agents together, dashed when they ran one after another. */
+.hc-tl-runs.team {
+  border-left: 2px solid var(--vscode-charts-yellow);
+  border-radius: 2px 6px 6px 2px;
+}
+
+.hc-tl-runs.team.serial {
+  border-left-style: dashed;
+}
+
+.hc-tl-team {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.hc-tl-team .codicon {
+  font-size: 12px;
+}
+
+.hc-run {
+  display: grid;
+  grid-template-columns: 10px auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'dot name desc status'
+    '. track track dur';
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 5px;
+}
+
+.hc-run > .hc-dot {
+  grid-area: dot;
+  width: 8px;
+  height: 8px;
+}
+
+.hc-run-name {
+  grid-area: name;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hc-run-desc {
+  grid-area: desc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+}
+
+.hc-run-status {
+  grid-area: status;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.hc-run-status .codicon {
+  font-size: 13px;
+}
+
+.hc-run-status.ok {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.hc-run-status.bad {
+  color: var(--vscode-errorForeground);
+}
+
+.hc-run-status.warn {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.hc-run-status.run {
+  color: var(--vscode-charts-blue);
+}
+
+.hc-run-status.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* The run bar: where in the prompt's window the agent ran, so a team shows together or one after another. */
+.hc-run-track {
+  grid-area: track;
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+  overflow: hidden;
+}
+
+.hc-run-seg.swatch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: auto;
+  height: auto;
+  border-radius: 2px;
+}
+
+.hc-run-dur {
+  grid-area: dur;
+  min-width: 34px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   color: var(--vscode-descriptionForeground);
 }
 

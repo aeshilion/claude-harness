@@ -155,6 +155,7 @@ test('readSession links launches, reports, messages and failures into a timeline
       ['answered directly', undefined, [], undefined, 0],
     ]
   );
+  assert.deepEqual(d.decisions[0].agents.slice().sort(), d.agents.map(a => a.id).sort());
 });
 
 test('readSession reads teammates, their idle reports and the agents they start', async () => {

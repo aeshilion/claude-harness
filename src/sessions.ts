@@ -113,6 +113,8 @@ export interface SessionDecision {
   launches: number;
   shape?: 'one agent' | 'agents together' | 'agents one after another';
   types: string[];
+  /** Ids of the agents this prompt launched, in launch order. */
+  agents: string[];
   outcome?: 'all reported back' | 'a launch failed' | 'still running' | 'no report';
   mainTools: number;
   messages: number;
@@ -668,6 +670,7 @@ export async function readSession(summary: SessionSummary): Promise<SessionDetai
       launches: launched.length,
       shape: !launched.length ? undefined : launched.length === 1 ? 'one agent' : together ? 'agents together' : 'agents one after another',
       types: [...new Set(launched.map(a => shortType(a.type)))].sort(),
+      agents: launched.map(a => a.id),
       outcome: !launched.length
         ? undefined
         : launched.some(a => a.status === 'failed')
