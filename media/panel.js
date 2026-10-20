@@ -2095,6 +2095,8 @@
   // Every row in the map shows the same facts in the same right-aligned columns: model (runs for a type), run time, tools, messages.
   const MAP_ROW_H = 30;
   const MAP_FACT_ENDS = [244, 172, 100, 28];
+  // The narrowest a row gets before the map scrolls: the four fact columns plus a short agent name.
+  const MAP_ROW_MIN = 400;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const fmtRun = ms => (ms > 0 ? fmtDur(ms) : '-');
   const mapCells = (right, y, list) => list.map((t, i) => svg('text', { x: right - MAP_FACT_ENDS[i], y, class: 'dg-meta', 'text-anchor': 'end' }, t));
@@ -2162,7 +2164,7 @@
     // right-aligned columns at the same place on every row.
     const INDENT = 22;
     const left0 = PAD + MAIN_W + 48;
-    const width = Math.max(W, left0 + 560 + PAD);
+    const width = Math.max(W, left0 + MAP_ROW_MIN + PAD);
     const rowRight = width - PAD;
     const { msgs, toolsOf, runOf } = mapFacts(d);
     const pos = new Map();
@@ -2258,7 +2260,7 @@
     const returnX = stepX + STEP_W + 14;
     const branchX = returnX + 16;
     const agentsX = branchX + 18;
-    const width = Math.max(W, agentsX + 560 + PAD);
+    const width = Math.max(W, agentsX + MAP_ROW_MIN + PAD);
     const right = width - PAD;
     const colOfTime = t => steps.reduce((c, s, i) => (typeof t === 'number' && s.at <= t ? i : c), 0);
     const byId = new Map(d.agents.map(a => [a.id, a]));

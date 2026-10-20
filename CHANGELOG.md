@@ -2,6 +2,12 @@
 
 All notable changes to Claude Harness are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions with no version change in the package.json history (0.1.3, 0.1.5 to 0.1.18, 0.1.20 to 0.1.24, 0.1.27, 0.2.1 and 0.2.3 to 0.2.11) have no entry.
 
+## [0.2.13] - 2026-10-21
+
+### Fixed
+
+- The Delegation map fits a narrow panel. Its rows shrink to the panel width instead of showing a horizontal scrollbar that hid the messages column.
+
 ## [0.2.12] - 2026-10-21
 
 ### Added
