@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
-import { Asset, Layout, ScopeView, claudeMdText, layoutOf } from './harness';
+import { Asset, ScopeView, claudeMdText } from './harness';
 import { CheckResult, run } from './standard';
 
 const readJson = (file: string): Record<string, unknown> => {
@@ -23,7 +23,7 @@ export interface GuardInfo {
 
 export const projectSlug = (dir: string) => path.resolve(dir).replace(/[^A-Za-z0-9]/g, '-');
 
-export function lastSession(dir: string, home = os.homedir()): number | undefined {
+export function lastSessionAt(dir: string, home = os.homedir()): number | undefined {
   const folder = path.join(home, '.claude', 'projects', projectSlug(dir));
   let newest = 0;
   try {
@@ -31,6 +31,11 @@ export function lastSession(dir: string, home = os.homedir()): number | undefine
   } catch {
     return undefined;
   }
+  return newest || undefined;
+}
+
+export function lastSession(dir: string, home = os.homedir()): number | undefined {
+  const newest = lastSessionAt(dir, home);
   return newest ? (Date.now() - newest) / 60000 : undefined;
 }
 
@@ -58,10 +63,10 @@ export interface FleetRow {
   id: string;
   label: string;
   path: string;
-  layout: Layout;
+  layout?: string;
   lines: number;
-  emDashes: number;
-  check?: { fail: number; review: number; restated: number; kind: string };
+  emDashes?: number;
+  check?: { fail: number; review: number; kind: string };
   checkState: string;
   plugins: string[];
   hookCopies: number;
@@ -82,10 +87,10 @@ export function fleetRow(view: ScopeView, check: { state: string; result?: Check
     id: view.id,
     label: view.label,
     path: view.path,
-    layout: layoutOf(view.path),
+    layout: result?.layout,
     lines: text === undefined ? 0 : text.split(/\r?\n/).length - (text.endsWith('\n') ? 1 : 0),
-    emDashes: text === undefined ? 0 : text.split(/\r?\n/).filter(l => l.includes(String.fromCharCode(0x2014))).length,
-    check: result ? { fail: result.fail, review: result.review, restated: result.findings.filter(f => /restates house rule/.test(f.text)).length, kind: result.kind } : undefined,
+    emDashes: result?.metrics?.emDashes,
+    check: result ? { fail: result.fail, review: result.review, kind: result.kind } : undefined,
     checkState: check.state,
     plugins: [...new Set(enabled)].sort(),
     hookCopies: items('hookScript').filter(copied).length,

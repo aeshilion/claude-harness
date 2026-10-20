@@ -33,6 +33,8 @@ Hooks show their JSON in the detail view. Click **Open in editor** to change the
 
 MCP servers and plugins have a switch in their detail view. The switch changes which folders use the item, or whether the plugin is enabled. It does not change the server or plugin itself. A server stored in a file can also be deleted from its detail view. See [MCP switches](mcp-toggles.md) and [Plugins](plugins.md).
 
+Agents of an enabled plugin also appear in the global Agents list. Those copies are read-only. See [Plugins](plugins.md#agents-in-the-global-list).
+
 ---
 
 <table width="100%" border="1" cellpadding="10" cellspacing="0">

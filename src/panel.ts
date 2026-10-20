@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { Asset, Field, ScopeView, fromFields, globalScope, kindInfo, mcpToken, readMarkdown, readText, toFields, writeMarkdown, writeText } from './harness';
 import { McpInfo, StdioConfig, probeHttp, probeStdio } from './probe';
 import type { CheckSummary } from './constitution';
-import type { InitForm } from './standard';
+import type { ScaffoldForm } from './standard';
 import { pickTools, splitTools } from './tools';
 
 export interface Detail {
@@ -43,7 +43,9 @@ type Message =
   | { type: 'ruleInfo'; id: string }
   | { type: 'marketplaces' }
   | { type: 'initForm'; dir: string }
-  | { type: 'initRun'; dir: string; form: InitForm; apply: boolean }
+  | { type: 'initRun'; dir: string; form: ScaffoldForm; apply: boolean }
+  | { type: 'sessions'; scope: string }
+  | { type: 'session'; scope: string; id: string }
   | { type: 'openAt'; file: string; line?: number };
 
 export interface PanelHost {
@@ -51,19 +53,24 @@ export interface PanelHost {
   find(id: string): Asset | undefined;
   refresh(): void;
   checks?(): Record<string, CheckSummary>;
+  standard?(): { name: string; fix: boolean; scaffold: boolean; align: boolean; owner: boolean } | undefined;
   ensureChecks?(scopeIds: string[]): void;
   fleet?(): unknown;
   effective?(scopeId: string): unknown;
   ruleInfo?(id: string): unknown;
   marketplaces?(): unknown;
   initForm?(dir: string): Promise<unknown>;
-  initRun?(dir: string, form: InitForm, apply: boolean): Promise<unknown>;
+  initRun?(dir: string, form: ScaffoldForm, apply: boolean): Promise<unknown>;
+  sessions?(scopeId: string): unknown;
+  session?(scopeId: string, id: string): Promise<unknown>;
 }
+
+export type Page = { page?: string; repo?: string; dir?: string; session?: string };
 
 export class HarnessPanel {
   private static current: HarnessPanel | undefined;
   private selected: string | undefined;
-  private page: { page?: string; repo?: string; dir?: string } | undefined;
+  private page: Page | undefined;
 
   static show(context: vscode.ExtensionContext, host: PanelHost, id?: string): void {
     if (HarnessPanel.current) {
@@ -84,7 +91,7 @@ export class HarnessPanel {
     HarnessPanel.current?.postState();
   }
 
-  static showPage(context: vscode.ExtensionContext, host: PanelHost, page: { page?: string; repo?: string; dir?: string }): void {
+  static showPage(context: vscode.ExtensionContext, host: PanelHost, page: Page): void {
     if (!HarnessPanel.current) HarnessPanel.show(context, host);
     HarnessPanel.current!.panel.reveal();
     HarnessPanel.current!.selected = undefined;
@@ -114,7 +121,7 @@ export class HarnessPanel {
   }
 
   private postState(): void {
-    this.post({ type: 'state', views: this.host.views(), checks: this.host.checks?.() ?? {} });
+    this.post({ type: 'state', views: this.host.views(), checks: this.host.checks?.() ?? {}, standard: this.host.standard?.() });
     if (this.selected) this.post({ type: 'detail', detail: this.detail(this.selected), external: true });
   }
 
@@ -276,6 +283,19 @@ export class HarnessPanel {
       case 'initRun':
         this.post({ type: 'initResult', dir: m.dir, apply: m.apply, data: await this.host.initRun?.(m.dir, m.form, m.apply) });
         return;
+      case 'sessions':
+        this.post({ type: 'sessions', scope: m.scope, list: this.host.sessions?.(m.scope) ?? [] });
+        return;
+      case 'session': {
+        let data: unknown;
+        try {
+          data = await this.host.session?.(m.scope, m.id);
+        } catch (e) {
+          data = { error: (e as Error).message };
+        }
+        this.post({ type: 'session', scope: m.scope, id: m.id, data: data ?? { error: 'The session transcript is gone.' } });
+        return;
+      }
       case 'openAt': {
         const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(m.file));
         const line = Math.max(0, (m.line ?? 1) - 1);

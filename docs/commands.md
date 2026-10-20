@@ -21,6 +21,7 @@ Every command is in the **Claude Harness** category. Commands marked *hidden* do
 | Open File (*hidden*) | Opens the item's file in the editor | Tree, item page |
 | Rename... (*hidden*) | Renames an item and its file | Tree right-click, item page |
 | Duplicate... (*hidden*) | Copies an item under a new name | Tree right-click, item page |
+| Compare with Copy... (*hidden*) | Opens an item and its copy in another scope in the diff editor. See [Duplicates](duplicates.md). | Tree right-click |
 | Delete (*hidden*) | Moves an item to the trash, or removes an MCP server's entry from its file | Tree right-click, item page |
 | Reveal in File Explorer (*hidden*) | Shows the item's file or folder in the file explorer | Tree right-click, item page |
 | Enable / Disable Plugin (*hidden*) | Turns a plugin on or off | Tree inline, plugin page |
@@ -30,18 +31,21 @@ Every command is in the **Claude Harness** category. Commands marked *hidden* do
 | Install Plugin... | Picks a plugin from your marketplaces and the scope, then runs `claude plugin install` in a terminal | Palette, Plugins header, tree inline |
 | Uninstall Plugin... | Confirms, then runs `claude plugin uninstall` in a terminal | Palette, tree right-click, plugin page |
 | Open Settings File... | Picks any `settings.json` or `settings.local.json` and opens it in the editable JSON view | Palette, tree inline on Settings |
-| Check Harness Standard | Runs the harness standard check on every repo, or on the repo you pick, and shows the results. See [Harness standard](harness-standard.md). | Palette, Repositories node, repo page |
-| Open the Harness Standard | Opens the standard that the check follows | Palette, CodeLens on a boilerplate heading |
 | Fleet Overview | Opens the table of every repo. See [Fleet overview](fleet-overview.md). | Palette, tree title bar, Repositories node |
 | Marketplace Health | Opens the marketplaces and their plugins. See [Marketplace health](marketplace-health.md). | Palette, Plugins header, Repositories node |
-| Fix Settings and Hooks... | Previews fix-settings.py for the repos you pick, shows the diffs, and applies them on Apply. See [Fix settings and hooks](fix-settings.md). | Palette, Repositories node, repo page, repo row |
-| Init Product Repo... | Opens the form that creates the harness files of a product repo. It asks for a folder when you run it from the palette. See [Init product repo](init-product-repo.md). | Palette, repo row, repo page |
+| Retire Copy (*hidden*) | Backs up a repo copy of a skill or agent that matches a global or plugin copy, then deletes it. See [Duplicates](duplicates.md#retire-a-copy). | Archive button on an item page |
 | Retire Clean Copies... | Retires identical repo copies of skills and agents after you pick them. See [Duplicates](duplicates.md#retire-clean-copies). | Palette, Repositories node, Fleet overview |
 | Rename Marketplace... | Renames a directory marketplace in the settings files, then re-registers it in a terminal. See [Marketplace health](marketplace-health.md#rename-a-directory-marketplace). | Palette, Marketplace health page |
-| Retire Copy (*hidden*) | Backs up a repo copy of a skill or agent that matches a global or plugin copy, then deletes it. See [Duplicates](duplicates.md#retire-a-copy). | Archive button on an item page |
 | Open Repo (*hidden*) | Opens a repo's page | Right-click on a repo row |
+| Open Session | Opens a Claude Code session's page. See [Sessions](sessions.md). | Session rows in the tree |
 | Remove Line (*hidden*) | Deletes a line that a CodeLens or quick fix flags. See [CLAUDE.md lenses](claude-md-lenses.md). | CodeLens, quick fix |
 | Repoint... (*hidden*) | Replaces a dead pointer with a name you pick. See [CLAUDE.md lenses](claude-md-lenses.md#dead-pointers). | CodeLens |
+
+Provider commands appear when a harness standard provider plugin is installed.
+
+## Plugin agents
+
+In the tree, a plugin agent offers only **Open File** and **Reveal in File Explorer** on right-click. **Rename**, **Duplicate**, **Compare with Copy** and **Delete** are hidden for it. See [Plugins](plugins.md#agents-in-the-global-list).
 
 ## Add MCP Server
 

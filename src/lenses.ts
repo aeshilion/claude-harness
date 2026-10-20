@@ -68,7 +68,7 @@ export function registerLenses(context: vscode.ExtensionContext, host: LensHost)
         if (p.code === 'restated') {
           out.push(new vscode.CodeLens(at(p.line), { title: `${p.message.replace(/^line \d+ /, '')}: Remove line`, command: 'claudeHarness.removeLine', arguments: [doc.uri, p.line] }));
         } else if (p.code === 'boilerplate') {
-          out.push(new vscode.CodeLens(at(p.line), { title: `${p.message.replace(/^line \d+ /, '')}: its rules belong in Working Method`, command: 'claudeHarness.openStandard', arguments: [] }));
+          out.push(new vscode.CodeLens(at(p.line), { title: `${p.message.replace(/^line \d+ /, '')}: open the standard`, command: 'claudeHarness.openStandard', arguments: [] }));
         } else if (p.code === 'pointer' && p.token) {
           out.push(
             new vscode.CodeLens(at(p.line), { title: `Pointer not found: ${p.token}: Repoint...`, command: 'claudeHarness.repoint', arguments: [doc.uri, p.line, p.token, 'path'] }),
@@ -108,7 +108,7 @@ export function registerLenses(context: vscode.ExtensionContext, host: LensHost)
             out.push(a);
           }
           out.push(drop('Drop line'));
-        } else if (/restates house rule/.test(d.message)) out.push(drop('Remove line'));
+        } else if (d.code === 'restated') out.push(drop('Remove line'));
       }
       return out;
     },

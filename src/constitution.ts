@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CheckResult, HarnessPlugin, PLUGIN_INSTALL, Problem, checkRepo, findHarnessPlugin, findPython, problemsOf } from './standard';
+import { CheckResult, NO_PROVIDER, Problem, Provider, checkRepo, findPython, needsPython, problemsOf } from './standard';
 
 export type CheckState = 'unchecked' | 'running' | 'pass' | 'fail' | 'review' | 'error' | 'no-plugin' | 'no-python';
 
@@ -37,25 +37,36 @@ export class Constitution {
   private readonly uris = new Map<string, vscode.Uri[]>();
   private readonly queue: { dir: string; force: boolean }[] = [];
   private active = 0;
-  private setup: Promise<{ plugin?: HarnessPlugin; py?: string[] }> | undefined;
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly changed = this.emitter.event;
   readonly diagnostics = vscode.languages.createDiagnosticCollection('claudeHarness.standard');
 
-  constructor(private readonly root: () => string, private readonly globalSettings: () => string) {}
+  constructor(readonly provider: () => Provider | undefined, private readonly globalSettings: () => string) {}
 
   dispose(): void {
     this.diagnostics.dispose();
     this.emitter.dispose();
   }
 
-  reset(): void {
-    this.setup = undefined;
+  available(): boolean {
+    return !!this.provider();
   }
 
-  tools(): Promise<{ plugin?: HarnessPlugin; py?: string[] }> {
-    this.setup ??= (async () => ({ plugin: findHarnessPlugin(this.root()), py: await findPython() }))();
-    return this.setup;
+  async tools(): Promise<{ provider?: Provider; py?: string[]; error?: string }> {
+    const provider = this.provider();
+    if (!provider) return { error: NO_PROVIDER };
+    const scripts = [provider.check, provider.fix, provider.scaffold].filter((s): s is string => !!s);
+    const py = scripts.some(needsPython) ? await findPython() : undefined;
+    if (scripts.some(needsPython) && !py) return { provider, error: 'Python 3 was not found on PATH (python, py -3 or python3).' };
+    return { provider, py };
+  }
+
+  clear(): void {
+    this.checks.clear();
+    this.problems.clear();
+    this.uris.clear();
+    this.diagnostics.clear();
+    this.emitter.fire();
   }
 
   get(dir: string): RepoCheck {
@@ -96,6 +107,7 @@ export class Constitution {
   }
 
   ensure(dirs: string[], force = false): void {
+    if (!this.available()) return;
     for (const dir of dirs) {
       const current = this.checks.get(dir);
       if (current?.state === 'running') continue;
@@ -122,17 +134,13 @@ export class Constitution {
 
   private async runOne(dir: string): Promise<void> {
     const key = this.keyOf(dir);
-    const { plugin, py } = await this.tools();
-    if (!plugin) {
-      this.checks.set(dir, { state: 'no-plugin', error: `The harness-plugin is not installed. Run: ${PLUGIN_INSTALL}`, key });
-      return;
-    }
-    if (!py) {
-      this.checks.set(dir, { state: 'no-python', error: 'Python 3 was not found on PATH (python, py -3 or python3).', key });
+    const { provider, py, error } = await this.tools();
+    if (!provider || error) {
+      this.checks.set(dir, { state: provider ? 'no-python' : 'no-plugin', error, key });
       return;
     }
     try {
-      const result = await checkRepo(plugin, py, dir);
+      const result = await checkRepo(provider, py, dir);
       this.checks.set(dir, { state: result.fail ? 'fail' : result.review ? 'review' : 'pass', result, key });
       this.publish(dir, result);
     } catch (e) {

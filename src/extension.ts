@@ -4,13 +4,14 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Constitution } from './constitution';
-import { FileEdit, fleetRow, guardInfo, guardReasons, marketplaceHealth, renameCatalog, renameCommands, renameInSettings } from './fleet';
+import { FileEdit, fleetRow, guardInfo, guardReasons, lastSessionAt, marketplaceHealth, renameCatalog, renameCommands, renameInSettings } from './fleet';
 import { registerLenses } from './lenses';
-import { InitForm, PLUGIN_INSTALL, applyFix, initArgs, parseInitOutput, previewFix, runScript } from './standard';
+import { NO_PROVIDER, Provider, ScaffoldForm, applyFix, findProvider, parseScaffoldOutput, previewFix, runScript, scaffoldArgs } from './standard';
 import {
   Asset,
   backupStamp,
   effectiveHarness,
+  pluginDirs,
   pluginViews,
   retireAsset,
   retireBlock,
@@ -40,6 +41,7 @@ import {
   removeJsonEntry,
   setMcpEnabled,
   parseMarkdown,
+  readMarkdown,
   renameAsset,
   repoScope,
   scan,
@@ -49,6 +51,7 @@ import {
   validateName,
 } from './harness';
 import { HarnessPanel, PanelHost } from './panel';
+import { findSession, listSessions, readSession } from './sessions';
 import { pickTools, splitTools, TOOL_FIELDS } from './tools';
 import { HarnessTree, Node } from './tree';
 
@@ -59,13 +62,26 @@ export function activate(context: vscode.ExtensionContext): void {
   let scopes: HarnessScope[] = [global];
   let views: ScopeView[] = [];
   let plugins: ScopeView[] = [];
+  let provider: Provider | undefined;
   const constitution = new Constitution(
-    () => global.root,
+    () => provider,
     () => path.join(global.root, 'settings.json')
   );
+  const loadProvider = () => {
+    const next = findProvider(pluginDirs(global.root, true));
+    const changed = next?.dir !== provider?.dir;
+    provider = next;
+    void vscode.commands.executeCommand('setContext', 'claudeHarness.standard', !!provider);
+    void vscode.commands.executeCommand('setContext', 'claudeHarness.align', !!provider?.align);
+    void vscode.commands.executeCommand('setContext', 'claudeHarness.scaffold', !!provider?.scaffold);
+    void vscode.commands.executeCommand('setContext', 'claudeHarness.fix', !!provider?.fix);
+    if (changed && !provider) constitution.clear();
+  };
   const tree = new HarnessTree(
     dir => constitution.summary(dir),
-    dirs => constitution.ensure(dirs)
+    dirs => constitution.ensure(dirs),
+    () => !!provider,
+    dir => listSessions(dir, global.root)
   );
   let watcher: vscode.FileSystemWatcher | undefined;
   let timer: NodeJS.Timeout | undefined;
@@ -114,7 +130,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const refresh = () => {
     const folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-    views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, local: s !== global && folders.some(f => samePath(f, s.base)), categories: scan(s) }));
+    views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, local: s !== global && folders.some(f => samePath(f, s.base)), lastUsed: s !== global ? lastSessionAt(s.base) : undefined, categories: scan(s) }));
     const globalMcp = views[0].categories.find(c => c.kind === 'mcp');
     if (globalMcp) {
       for (const a of globalMcp.items) a.status = cliServers.find(c => c.name === a.name)?.status;
@@ -122,7 +138,17 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     applyMcpState(views, global.userConfig);
     plugins = pluginViews(global.root);
+    loadProvider();
     linkCopies(views, plugins);
+    // A plugin enabled in your settings runs its agents as global agents, so they join the global Agents list, read-only.
+    const globalAgents = views[0].categories.find(c => c.kind === 'agent');
+    const enabledPlugins = new Set((views[0].categories.find(c => c.kind === 'plugin')?.items ?? []).filter(p => p.enabled).map(p => p.name));
+    if (globalAgents) {
+      for (const p of plugins.filter(v => enabledPlugins.has(v.id.slice('plugin:'.length))))
+        for (const a of p.categories.find(c => c.kind === 'agent')?.items ?? [])
+          globalAgents.items.push({ ...a, source: 'plugin', description: [`plugin ${p.id.slice('plugin:'.length).split('@')[0]}`, a.description].filter(Boolean).join(' · ') });
+      globalAgents.items.sort((x, y) => x.name.localeCompare(y.name));
+    }
     for (const a of views.flatMap(v => v.categories.find(c => c.kind === 'plugin')?.items ?? [])) if (pluginIsMod(global.root, a.name)) a.description += ' · mod';
     tree.setCategories(views[0].categories, views.slice(1));
     HarnessPanel.update();
@@ -170,6 +196,7 @@ export function activate(context: vscode.ExtensionContext): void {
     find,
     refresh,
     checks: () => Object.fromEntries(repoViews().map(v => [v.id, constitution.summary(v.path)])),
+    standard: () => (provider ? { name: provider.name, fix: !!provider.fix, scaffold: !!provider.scaffold, align: !!provider.align, owner: !!provider.ownerPattern } : undefined),
     ensureChecks: ids => constitution.ensure(ids.map(id => viewOfScope(id)?.path).filter((p): p is string => !!p && p !== global.base)),
     fleet: () => {
       constitution.ensure(repoViews().map(v => v.path));
@@ -185,29 +212,27 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!asset || asset.kind !== 'rule') return undefined;
       const scope = scopeOf(asset);
       const base = scope.id === global.id ? repoViews().find(v => v.local)?.path : scope.base;
-      const roster = rosterFor(base);
-      if (!base) return { ...ruleInfo(asset, '', roster), globs: [], total: 0, base: '' };
-      return ruleInfo(asset, base, roster);
+      return { ...ruleInfo(asset, base ?? '', rosterFor(base), provider?.ownerPattern), base: base ?? '' };
     },
     marketplaces: () => marketplaceHealth(global.root),
     initForm: async dir => {
-      const { plugin, py } = await constitution.tools();
+      const { provider: p, error } = await constitution.tools();
       return {
         name: path.basename(dir),
         hasClaudeMd: fs.existsSync(path.join(dir, 'CLAUDE.md')),
         agents: [...rosterFor(dir).agents].sort((a, b) => a.localeCompare(b)),
-        error: !plugin ? `The harness-plugin is not installed. Run: ${PLUGIN_INSTALL}` : !py ? 'Python 3 was not found on PATH.' : undefined,
+        error: error ?? (p?.scaffold ? undefined : `${p?.name ?? 'The provider'} has no scaffold.`),
       };
     },
-    initRun: async (dir, form: InitForm, apply) => {
-      const { plugin, py } = await constitution.tools();
-      if (!plugin || !py) return { error: !plugin ? `The harness-plugin is not installed. Run: ${PLUGIN_INSTALL}` : 'Python 3 was not found on PATH.' };
+    initRun: async (dir, form: ScaffoldForm, apply) => {
+      const { provider: p, py, error } = await constitution.tools();
+      if (error || !p?.scaffold) return { error: error ?? `${p?.name ?? 'The provider'} has no scaffold.` };
       if (!form.summary.trim()) return { error: 'Write a summary of one to three sentences first.' };
       const roster = rosterFor(dir);
       const unknown = form.areas.filter(a => a.owner.trim() && !roster.agents.has(a.owner.trim())).map(a => a.owner.trim());
       if (unknown.length) return { error: `No agent named ${unknown.join(', ')} on disk.` };
-      const r = await runScript(py, plugin.init, initArgs(dir, form, apply));
-      if (r.code !== 0) return { error: r.stderr.trim() || `init-product-repo.py exited with ${r.code}` };
+      const r = await runScript(py, p.scaffold, scaffoldArgs(dir, form, apply));
+      if (r.code !== 0) return { error: r.stderr.trim() || `The scaffold exited with ${r.code}` };
       if (apply) {
         const config = vscode.workspace.getConfiguration('claudeHarness');
         if (!scopes.some(s => samePath(s.base, dir))) {
@@ -218,7 +243,26 @@ export function activate(context: vscode.ExtensionContext): void {
         refresh();
         constitution.ensure([dir], true);
       }
-      return parseInitOutput(r.stdout);
+      return parseScaffoldOutput(r.stdout);
+    },
+    sessions: id => {
+      const view = viewOfScope(id);
+      return view && view.id !== global.id ? listSessions(view.path, global.root) : [];
+    },
+    session: async (id, sessionId) => {
+      const view = viewOfScope(id);
+      const summary = view && view.id !== global.id ? findSession(view.path, global.root, sessionId) : undefined;
+      if (!summary) return undefined;
+      const detail = await readSession(summary);
+      // An agent definition's own `color` field colors its lanes.
+      const definitions = [...views, ...plugins].flatMap(v => v.categories.find(c => c.kind === 'agent')?.items ?? []);
+      const agentColors: Record<string, string> = {};
+      for (const type of new Set(detail.agents.map(a => a.type))) {
+        const asset = definitions.find(a => a.name === (type.split(':').pop() ?? type));
+        const color = asset ? readMarkdown(asset.file).data.color : undefined;
+        if (typeof color === 'string') agentColors[type] = color.trim().toLowerCase();
+      }
+      return { ...detail, repo: view!.label, agentColors };
     },
   };
 
@@ -235,16 +279,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const needTools = async () => {
     const tools = await constitution.tools();
-    if (!tools.plugin) {
-      const pick = await vscode.window.showWarningMessage('The harness-plugin is not installed, so this command is off.', { detail: PLUGIN_INSTALL, modal: true }, 'Copy Install Command');
-      if (pick) await vscode.env.clipboard.writeText(PLUGIN_INSTALL);
+    if (!tools.provider || tools.error) {
+      void vscode.window.showInformationMessage(`${tools.error ?? NO_PROVIDER} This command is off.`);
       return undefined;
     }
-    if (!tools.py) {
-      void vscode.window.showErrorMessage('Python 3 was not found on PATH (python, py -3 or python3), so this command is off.');
-      return undefined;
-    }
-    return { plugin: tools.plugin, py: tools.py };
+    return { plugin: tools.provider, py: tools.py };
   };
 
   const repoOfArg = (arg: unknown): HarnessScope | undefined => {
@@ -645,14 +684,33 @@ export function activate(context: vscode.ExtensionContext): void {
       HarnessPanel.showPage(context, host, { page: 'fleet' });
     }),
     vscode.commands.registerCommand('claudeHarness.showMarketplaces', () => HarnessPanel.showPage(context, host, { page: 'marketplaces' })),
+    vscode.commands.registerCommand('claudeHarness.showSession', (arg?: unknown, sessionId?: string) => {
+      const node = arg as Node | undefined;
+      const repo = node && typeof node === 'object' && node.type === 'session' ? node.view.id : repoOfArg(arg)?.id;
+      const id = node && typeof node === 'object' && node.type === 'session' ? node.session.id : sessionId;
+      if (repo && id) HarnessPanel.showPage(context, host, { page: 'session', repo, session: id });
+    }),
     vscode.commands.registerCommand('claudeHarness.checkRepos', (arg?: unknown) => {
       const repo = repoOfArg(arg);
-      constitution.reset();
+      loadProvider();
+      if (!provider) {
+        void vscode.window.showInformationMessage(`${NO_PROVIDER} This command is off.`);
+        return;
+      }
       constitution.ensure(repo ? [repo.base] : repoViews().map(v => v.path), true);
     }),
     vscode.commands.registerCommand('claudeHarness.openStandard', async () => {
       const tools = await needTools();
-      if (tools) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(tools.plugin.dir, 'skills', 'fix-constitution', 'references', 'standard.md')));
+      if (tools?.plugin.standard) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(tools.plugin.standard));
+    }),
+    vscode.commands.registerCommand('claudeHarness.alignClaudeMd', async (arg?: unknown) => {
+      const tools = await needTools();
+      if (!tools?.plugin.align) return;
+      const repo = repoOfArg(arg) ?? (await pickScope(undefined, 'Align CLAUDE.md in'));
+      if (!repo || repo.id === global.id) return;
+      const dirs = await guard([repo.base], `Align CLAUDE.md in ${repo.label}`);
+      if (!dirs?.length) return;
+      terminal(`Align: ${repo.label}`, repo.base, `claude "${tools.plugin.align.replace(/"/g, '\\"')}"`);
     }),
 
     vscode.commands.registerCommand('claudeHarness.fixSettings', async (arg?: unknown) => {
@@ -666,7 +724,7 @@ export function activate(context: vscode.ExtensionContext): void {
           { label: 'Fix plugins, marketplaces and hooks', keep: false },
           { label: 'Keep plugin settings', description: '--keep-plugins: only replaced hooks are removed', keep: true },
         ],
-        { title: 'What fix-settings may change' }
+        { title: 'What the fix may change' }
       );
       if (!mode) return;
       dirs = await guard(dirs, 'Fix settings in these repos');
@@ -682,7 +740,7 @@ export function activate(context: vscode.ExtensionContext): void {
         })
       );
       const failed = previews.filter(p => p.error);
-      if (failed.length) void vscode.window.showErrorMessage(`fix-settings failed in ${failed.map(f => path.basename(f.dir)).join(', ')}: ${failed[0].error}`);
+      if (failed.length) void vscode.window.showErrorMessage(`The fix failed in ${failed.map(f => path.basename(f.dir)).join(', ')}: ${failed[0].error}`);
       const changed = previews.filter(p => p.preview && p.preview.changes.length);
       if (!changed.length) {
         if (!failed.length) void vscode.window.showInformationMessage(`Nothing to fix in ${dirs.length === 1 ? path.basename(dirs[0]) : `${dirs.length} repos`}.`);
@@ -694,24 +752,26 @@ export function activate(context: vscode.ExtensionContext): void {
           if (f.after && opened++ < 8)
             await vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(f.before), vscode.Uri.file(f.after), `${path.basename(p.dir)}: ${f.rel} (now ↔ after fix)`, { preview: false });
       const detail = changed.map(p => `${path.basename(p.dir)}\n${p.preview!.changes.map(c => `  ${c}`).join('\n')}`).join('\n\n');
-      const ok = await vscode.window.showWarningMessage(`Apply fix-settings to ${changed.length === 1 ? path.basename(changed[0].dir) : `${changed.length} repos`}?`, { modal: true, detail }, 'Apply');
+      const ok = await vscode.window.showWarningMessage(`Apply the fix to ${changed.length === 1 ? path.basename(changed[0].dir) : `${changed.length} repos`}?`, { modal: true, detail }, 'Apply');
       if (ok !== 'Apply') return;
       for (const p of changed) {
         try {
           await applyFix(tools.plugin, tools.py, p.dir, mode.keep, settings);
         } catch (e) {
-          void vscode.window.showErrorMessage(`fix-settings failed in ${path.basename(p.dir)}: ${(e as Error).message}`);
+          void vscode.window.showErrorMessage(`The fix failed in ${path.basename(p.dir)}: ${(e as Error).message}`);
         }
       }
       refresh();
       constitution.ensure(changed.map(p => p.dir), true);
-      void vscode.window.showInformationMessage(`Applied fix-settings to ${changed.length === 1 ? path.basename(changed[0].dir) : `${changed.length} repos`}.`);
+      void vscode.window.showInformationMessage(`Applied the fix to ${changed.length === 1 ? path.basename(changed[0].dir) : `${changed.length} repos`}.`);
     }),
 
-    vscode.commands.registerCommand('claudeHarness.initRepo', async (arg?: unknown) => {
+    vscode.commands.registerCommand('claudeHarness.scaffoldRepo', async (arg?: unknown) => {
+      const tools = await needTools();
+      if (!tools?.plugin.scaffold) return;
       let dir = repoOfArg(arg)?.base;
       if (!dir) {
-        const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, openLabel: 'Init Product Repo', title: 'Folder of the new product repo' });
+        const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, openLabel: 'Scaffold Repo Harness', title: 'Folder of the repo to scaffold' });
         dir = picked?.[0]?.fsPath;
       }
       if (dir) HarnessPanel.showPage(context, host, { page: 'init', dir });
@@ -721,7 +781,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const asset = assetOf(arg);
       if (!asset) return;
       const scope = scopeOf(asset);
-      const block = retireBlock(asset, scope.id === global.id ? undefined : scope.base);
+      const block = retireBlock(asset, scope.id === global.id ? undefined : scope.base, provider?.keepCopies);
       if (block) {
         void vscode.window.showInformationMessage(`${asset.name} cannot be retired. ${block}`);
         return;
@@ -742,11 +802,11 @@ export function activate(context: vscode.ExtensionContext): void {
         v.categories
           .filter(c => c.kind === 'skill' || c.kind === 'agent')
           .flatMap(c => c.items)
-          .filter(a => !retireBlock(a, v.path))
+          .filter(a => !retireBlock(a, v.path, provider?.keepCopies))
           .map(a => ({ asset: a, view: v }))
       );
       if (!candidates.length) {
-        void vscode.window.showInformationMessage('No product repo holds an identical copy of a global or plugin skill or agent.');
+        void vscode.window.showInformationMessage('No repo holds an identical copy of a global or plugin skill or agent.');
         return;
       }
       const picked = await vscode.window.showQuickPick(

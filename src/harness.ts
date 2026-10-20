@@ -119,6 +119,7 @@ export interface ScopeView {
   label: string;
   path: string;
   local?: boolean;
+  lastUsed?: number;
   categories: Category[];
 }
 
@@ -833,8 +834,9 @@ export interface PluginDir {
   installed: boolean;
 }
 
-export function pluginDirs(root: string): PluginDir[] {
+export function pluginDirs(root: string, withSources = false): PluginDir[] {
   const out = new Map<string, PluginDir>();
+  const sources: PluginDir[] = [];
   type Entry = { installPath?: string; lastUpdated?: string };
   const installed = (readJson(path.join(root, 'plugins', 'installed_plugins.json')).plugins ?? {}) as Record<string, Entry[]>;
   for (const [key, entries] of Object.entries(installed)) {
@@ -850,12 +852,15 @@ export function pluginDirs(root: string): PluginDir[] {
     if (m.source?.source !== 'directory' || !m.installLocation) continue;
     const plugins = (readJson(path.join(m.installLocation, '.claude-plugin', 'marketplace.json')).plugins ?? []) as { name?: string; source?: unknown }[];
     for (const p of plugins) {
-      if (!p.name || out.has(`${p.name}@${market}`)) continue;
+      if (!p.name) continue;
       const dir = typeof p.source === 'string' ? path.resolve(m.installLocation, p.source) : path.join(m.installLocation, p.name);
-      if (fs.existsSync(dir)) out.set(`${p.name}@${market}`, { key: `${p.name}@${market}`, plugin: p.name, market, dir, installed: false });
+      if (!fs.existsSync(dir)) continue;
+      const entry = { key: `${p.name}@${market}`, plugin: p.name, market, dir, installed: false };
+      if (!out.has(entry.key)) out.set(entry.key, entry);
+      else if (withSources) sources.push(entry);
     }
   }
-  return [...out.values()].sort((a, b) => a.key.localeCompare(b.key));
+  return [...out.values(), ...sources].sort((a, b) => a.key.localeCompare(b.key) || Number(a.installed) - Number(b.installed));
 }
 
 export function pluginViews(root: string): ScopeView[] {
@@ -974,8 +979,6 @@ export function matchGlobs(dir: string, globs: string[]): { globs: GlobMatch[]; 
   return { globs: out, total: all.size, capped };
 }
 
-export const OWNER_LINE = /^\s*-\s*Owner agent:\s*`([^`]+)`/m;
-
 export interface RuleInfo {
   globs: GlobMatch[];
   total: number;
@@ -985,10 +988,15 @@ export interface RuleInfo {
   base: string;
 }
 
-export function ruleInfo(asset: Asset, repoDir: string, roster: Roster): RuleInfo {
+export function ruleInfo(asset: Asset, repoDir: string, roster: Roster, ownerPattern?: string): RuleInfo {
   const doc = readMarkdown(asset.file);
-  const { globs, total, capped } = matchGlobs(repoDir, listOf(doc.data.paths));
-  const owner = OWNER_LINE.exec(doc.body)?.[1];
+  const { globs, total, capped } = repoDir ? matchGlobs(repoDir, listOf(doc.data.paths)) : { globs: [], total: 0, capped: false };
+  let owner: string | undefined;
+  try {
+    owner = ownerPattern ? new RegExp(ownerPattern, 'm').exec(doc.body)?.[1] : undefined;
+  } catch {
+    owner = undefined;
+  }
   return { globs, total, capped, owner, ownerFound: owner ? roster.agents.has(owner) : undefined, base: repoDir };
 }
 
@@ -1106,8 +1114,6 @@ export function effectiveHarness(global: HarnessScope, repo: HarnessScope): Effe
   return { memory, rules, plugins, hooks, capped };
 }
 
-export const BOILERPLATE_SECTIONS = ['Workflow Orchestration', 'Subagent Strategy', 'Self-Improvement Loop', 'Task Management', 'Core Principles', 'Token Efficiency', 'Delegation', 'Agent Delegation', 'Skill Routing'];
-
 const isDir = (p: string) => {
   try {
     return fs.statSync(p).isDirectory();
@@ -1116,15 +1122,23 @@ const isDir = (p: string) => {
   }
 };
 
-export const isClassRepo = (dir: string) => isDir(path.join(dir, 'demos')) && isDir(path.join(dir, 'labs'));
-
-export function keepsCopies(dir: string): boolean {
-  const file = path.join(dir, 'CLAUDE.md');
-  if (!fs.existsSync(file)) return false;
-  return /\bcop(?:y|ies)\b[^\n]*\b(?:kept|keeps?)\b|\bkeeps?\b[^\n]*\bcop(?:y|ies)\b/i.test(readText(file));
+/** Repos the harness standard provider marks as keeping their copies: all `folders` present, or CLAUDE.md matching `claudeMdPattern`. */
+export interface KeepCopies {
+  folders?: string[];
+  claudeMdPattern?: string;
 }
 
-export type Layout = 'router' | 'old template' | 'class boilerplate' | 'other' | 'none';
+export function keepsCopies(dir: string, keep: KeepCopies | undefined): string | undefined {
+  if (!keep) return undefined;
+  if (keep.folders?.length && keep.folders.every(f => isDir(path.join(dir, f)))) return `It has ${keep.folders.join(' and ')}, so it keeps its copies.`;
+  const file = path.join(dir, 'CLAUDE.md');
+  if (!keep.claudeMdPattern || !fs.existsSync(file)) return undefined;
+  try {
+    return new RegExp(keep.claudeMdPattern, 'i').test(readText(file)) ? 'Its CLAUDE.md says copies are kept.' : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function claudeMdText(dir: string, expand = true): string | undefined {
   const file = path.join(dir, 'CLAUDE.md');
@@ -1141,23 +1155,11 @@ export function claudeMdText(dir: string, expand = true): string | undefined {
     .join('\n');
 }
 
-export function layoutOf(dir: string): Layout {
-  const text = claudeMdText(dir);
-  if (text === undefined) return 'none';
-  const heads = [...text.matchAll(/^## (.+)$/gm)].map(m => m[1].trim());
-  if (heads.includes('Harness')) return 'router';
-  if (isClassRepo(dir)) return 'class boilerplate';
-  if (heads.some(h => BOILERPLATE_SECTIONS.includes(h))) return 'old template';
-  return 'other';
-}
-
-export function retireBlock(asset: Asset, repoDir: string | undefined): string | undefined {
+export function retireBlock(asset: Asset, repoDir: string | undefined, keep?: KeepCopies): string | undefined {
   if (asset.kind !== 'skill' && asset.kind !== 'agent') return 'Only skills and agents are retired.';
   if (!repoDir || asset.scope === 'global' || asset.scope.startsWith('plugin:')) return 'Only a repo copy is retired.';
   if (!asset.copies?.some(c => c.same && (c.scope === 'global' || c.scope.startsWith('plugin:')))) return 'It has no identical global or plugin copy.';
-  if (isClassRepo(repoDir)) return 'A class repo keeps its copies.';
-  if (keepsCopies(repoDir)) return 'Its CLAUDE.md says copies are kept.';
-  return undefined;
+  return keepsCopies(repoDir, keep);
 }
 
 export const backupStamp = (d = new Date()) => {
