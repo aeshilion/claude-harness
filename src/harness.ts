@@ -119,6 +119,7 @@ export interface ScopeView {
   label: string;
   path: string;
   local?: boolean;
+  lastUsed?: number;
   categories: Category[];
 }
 

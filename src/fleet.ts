@@ -23,7 +23,7 @@ export interface GuardInfo {
 
 export const projectSlug = (dir: string) => path.resolve(dir).replace(/[^A-Za-z0-9]/g, '-');
 
-export function lastSession(dir: string, home = os.homedir()): number | undefined {
+export function lastSessionAt(dir: string, home = os.homedir()): number | undefined {
   const folder = path.join(home, '.claude', 'projects', projectSlug(dir));
   let newest = 0;
   try {
@@ -31,6 +31,11 @@ export function lastSession(dir: string, home = os.homedir()): number | undefine
   } catch {
     return undefined;
   }
+  return newest || undefined;
+}
+
+export function lastSession(dir: string, home = os.homedir()): number | undefined {
+  const newest = lastSessionAt(dir, home);
   return newest ? (Date.now() - newest) / 60000 : undefined;
 }
 

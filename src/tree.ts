@@ -160,7 +160,7 @@ export class HarnessTree implements vscode.TreeDataProvider<Node> {
         asset.kind === 'plugin'
           ? new vscode.ThemeIcon(asset.enabled ? 'pass-filled' : 'circle-large-outline', asset.enabled ? new vscode.ThemeColor('testing.iconPassed') : undefined)
           : new vscode.ThemeIcon(this.categories.find(c => c.kind === asset.kind)?.icon ?? 'file');
-      item.contextValue = asset.kind === 'mcp' && asset.file && asset.jsonPath ? 'asset.mcp.stored' : `asset.${asset.kind}`;
+      item.contextValue = asset.kind === 'mcp' && asset.file && asset.jsonPath ? 'asset.mcp.stored' : asset.source === 'plugin' && asset.kind !== 'mcp' ? `asset.${asset.kind}.plugin` : `asset.${asset.kind}`;
       item.command = { command: 'claudeHarness.open', title: 'Open', arguments: [asset.id] };
       return item;
     }

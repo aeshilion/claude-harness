@@ -584,6 +584,220 @@
       "catalogue": {
         "action": "none"
       }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "22:55",
+      "to": "23:40",
+      "sessionId": "fb81bfd4-72e6-4a94-a625-ad8b0f122443",
+      "branch": "feature/standard-provider",
+      "commits": [
+        "da0198f"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js",
+        "media/panel.css",
+        "src/sessions.ts",
+        "src/extension.ts",
+        "src/tree.ts"
+      ],
+      "mechanism": {
+        "takes": "the transcripts of an AI coding session and the color each agent definition declares",
+        "does": "turns every prompt into a node of a foldable decision tree, either summed by what followed or laid out prompt by prompt in time order, gives categories that share a declared color their own shade of it in every chart, stacks overlapping runs as one ribbon each so the height is the number running, and sizes each agent's point by what it cost",
+        "returns": "a session review where each decision, its agents and their cost can be read in sequence, with no two categories painted alike"
+      },
+      "portsAsIs": [
+        "foldable decision tree with a sum and a sequence mode",
+        "theme-aware shades for categories that share a declared color",
+        "stacked area of overlapping runs with one ribbon per run",
+        "headless browser preview of a webview with real data in both themes"
+      ],
+      "perCustomer": [
+        "the transcript format the reader parses",
+        "where category colors are declared"
+      ],
+      "evidence": [
+        "unit tests: 28 pass, including the decision's launched agent ids",
+        "headless Chrome previews of Decisions, the hover timeline, Concurrency and Scatter on a real 21-prompt session, dark and light",
+        "render-screenshots.ps1 -Page -Scenes: rendered=4 failed=0",
+        "sideloaded as 0.2.1, 0.2.2, 0.2.3 and 0.2.4"
+      ],
+      "toolchain": {
+        "skills": [
+          "ui-ux-pro-max",
+          "vscode-extension",
+          "claude-learn",
+          "claude-learn-harvest",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [
+          "claude-in-chrome"
+        ],
+        "agents": [
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "23:34",
+      "to": "23:55",
+      "sessionId": "4d23c481-ef30-43d7-93ea-11fb447d1337",
+      "branch": "feature/standard-provider",
+      "commits": [],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js",
+        "media/panel.css",
+        "src/fleet.ts",
+        "src/extension.ts",
+        "package.json"
+      ],
+      "mechanism": {
+        "takes": "the list of known repositories and the Claude Code session transcripts of each, plus one session's agent runs with start, end, tokens and cost",
+        "does": "orders repositories by the time of their last session or alphabetically with the open workspace pinned on top, packs overlapping agent runs into fixed lanes drawn as rounded bars, and labels every point of the run-time versus tokens scatter",
+        "returns": "a sortable repository list and session charts where no run moves lanes and every agent is named"
+      },
+      "portsAsIs": [
+        "lane packing of overlapping intervals into steady rows",
+        "last-used ordering from file modification times"
+      ],
+      "perCustomer": [
+        "where the session transcripts live",
+        "the agent names and colors"
+      ],
+      "evidence": [
+        "preview render of the audio-star session 92857556: conc, scatter, conc-light rendered=3 failed=0",
+        "tests: 28 unit tests passed",
+        "sideloaded 0.2.5 and 0.2.6, installed=True, files=318",
+        "issue https://github.com/alexander-kastil/claude-harness/issues/4"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "create-issue",
+          "claude-learn",
+          "claude-learn-harvest",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "from": "23:55",
+      "to": "23:59",
+      "sessionId": "4d23c481-ef30-43d7-93ea-11fb447d1337",
+      "branch": "feature/standard-provider",
+      "commits": [],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js",
+        "media/panel.css",
+        "package.json"
+      ],
+      "mechanism": {
+        "takes": "one Claude Code session's agent runs with their parent, type, model, run time, tools and messages",
+        "does": "offers a second lens on the delegation map that sums the runs by agent type under whoever started them, with a drill-down from each type to its runs, beside the view of every run",
+        "returns": "a delegation map that switches between a per-type summary and every individual run"
+      },
+      "portsAsIs": [
+        "sum and sequence offered as two modes of one view behind a shared switch"
+      ],
+      "perCustomer": [
+        "the agent types and their colors"
+      ],
+      "evidence": [
+        "preview render of the audio-star session 92857556: map sum, drill-down and full mode in dark and light",
+        "sideloaded 0.2.7 and 0.2.8, installed=True, files=318"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "create-issue"
+        ],
+        "mcpServers": [],
+        "agents": []
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
+    },
+    {
+      "date": "2026-10-21",
+      "from": "00:00",
+      "to": "00:18",
+      "sessionId": "4d23c481-ef30-43d7-93ea-11fb447d1337",
+      "branch": "feature/standard-provider",
+      "commits": [],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js",
+        "media/panel.css",
+        "package.json"
+      ],
+      "mechanism": {
+        "takes": "one Claude Code session's prompts with what the main thread did after each, and its agent runs with launch time, report time, parent, model, run time, tools and messages",
+        "does": "draws the session as a top-to-bottom process: each prompt a step on the main thread's spine, each delegated agent a full-width row beside the prompt that started it, a parallel gateway for agents launched together, and a dashed return to the spine after the prompt its report reached; every agent row shows the same four facts in fixed right-aligned columns, and the per-type summary becomes a full-width tree table",
+        "returns": "a delegation process that fits the panel width without a horizontal scrollbar and reads as the order the work happened"
+      },
+      "portsAsIs": [
+        "vertical process layout of a conversation with branches to delegated workers and joins back",
+        "normalized fact columns that keep every field in the same place on every row"
+      ],
+      "perCustomer": [
+        "where the session transcripts live",
+        "the agent names and colors"
+      ],
+      "evidence": [
+        "preview render of the audio-star session 92857556: vertical process and full-width summary, dark and light, rendered failed=0",
+        "sideloaded 0.2.9 to 0.2.12, installed=True, files=318"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "ui-ux-pro-max",
+          "report",
+          "claude-learn",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
     }
   ]
 }

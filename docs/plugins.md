@@ -27,6 +27,12 @@ The Plugins section lists the plugins in the global harness and in each repo. Yo
 
 The switch sets the plugin's key under `enabledPlugins` in the `settings.json` of that folder, to `true` or `false`. It adds the key when it is missing. No other key changes.
 
+## Agents in the global list
+
+Each agent of a plugin enabled in `~/.claude/settings.json` also appears in the global **Agents** list. The list is sorted by name, like the other global agents. These copies are read-only. Each description starts with `plugin <name>`, for example `plugin review-kit · Reviews a pull request`. Plugins enabled only in a repo's settings do not add agents to the global list.
+
+In the activity bar, the right-click menu of a plugin agent shows **Open File** and **Reveal in File Explorer** only. **Rename**, **Duplicate**, **Compare with Copy** and **Delete** do not appear for it. See [Commands](commands.md#plugin-agents).
+
 ## Install and uninstall
 
 Click the plus button on the **Plugins** header, or run **Claude Harness: Install Plugin...**, to install a plugin from your marketplaces. The trash button on a plugin page, the tree's right-click menu and **Claude Harness: Uninstall Plugin...** uninstall it. Both run the `claude plugin` command in a terminal. See [Commands](commands.md#install-and-uninstall-plugins).

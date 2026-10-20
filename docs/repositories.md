@@ -30,7 +30,7 @@ A folder counts as a repo when it has a `.claude` folder or a `CLAUDE.md` file. 
 
 A subfolder that you create later under an added parent folder appears after you click **Refresh** or reload the window.
 
-Repos that are open as workspace folders are listed first under **Repositories**. The other repos follow in alphabetical order by folder name. When both kinds are present, a thin line separates them.
+In the sidebar, repos that are open as workspace folders are listed first under **Repositories**. The other repos follow. By default the other repos sort by last used, which the **Sort by last used** button (history icon) on the group header selects. The repo with the newest Claude Code session comes first, and repos without a session follow in alphabetical order by folder name. Click **Sort A-Z** (case-sensitive icon) to sort the other repos alphabetically by folder name instead. Claude Harness remembers your choice. Open repos stay on top in both orders. When both kinds are present, a thin line separates them.
 
 ![Sidebar with the open repo on top and a separator line below it](images/repositories.png)
 
@@ -51,7 +51,7 @@ Provider features appear when a harness standard provider plugin is installed.
 
 ## Activity bar node
 
-The activity bar tree has a **Repositories** node below the global sections. Its count is the number of repos. Expand it to list the repos, and click a repo to open its page. Expand a repo row to list its [sessions](sessions.md#sessions-in-the-tree), newest first. The node has a table button that opens the [Fleet overview](fleet-overview.md), and the activity bar title bar has the same button.
+The activity bar tree has a **Repositories** node below the global sections. Its count is the number of repos. Expand it to list the repos, and click a repo to open its page. Expand a repo row to list its [sessions](sessions.md#sessions-in-the-tree), newest first. The node has a dashboard button that opens the [Fleet overview](fleet-overview.md), and the activity bar title bar has the same button.
 
 A repo row's right-click menu has one command:
 

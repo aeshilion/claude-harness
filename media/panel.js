@@ -11,6 +11,7 @@
     overviewFilter: '',
     expanded: new Set(saved.expanded || []),
     mcpSort: saved.mcpSort || 'name',
+    repoSort: saved.repoSort || 'recent',
     mcpInfo: {},
     checks: {},
     page: undefined,
@@ -24,6 +25,7 @@
     session: undefined,
     sessionView: saved.sessionView || 'timeline',
     decisionMode: saved.decisionMode || 'sum',
+    mapMode: saved.mapMode || 'timeline',
   };
   const app = document.getElementById('app');
 
@@ -44,7 +46,7 @@
   const logo = size => (document.body.dataset.logo ? el('img', { className: `logo ${size}`, src: document.body.dataset.logo, alt: '' }) : icon('hubot'));
   const iconBtn = (name, title, onclick, disabled) => el('button', { className: 'icon-btn', title, 'aria-label': title, onclick, disabled }, icon(name));
 
-  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], mcpSort: state.mcpSort, sessionView: state.sessionView, decisionMode: state.decisionMode });
+  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], mcpSort: state.mcpSort, repoSort: state.repoSort, sessionView: state.sessionView, decisionMode: state.decisionMode, mapMode: state.mapMode });
   const SOURCES = {
     user: { icon: 'account', label: 'Your config (~/.claude.json)' },
     local: { icon: 'lock', label: 'Local to this repo (~/.claude.json)' },
@@ -287,12 +289,33 @@
       renderCategories(block, global, q, false);
       list.append(block);
     }
-    const visibleRepos = repos.filter(v => !q || v.categories.some(c => c.items.some(a => matches(a, q))));
+    const visibleRepos = repos
+      .filter(v => !q || v.categories.some(c => c.items.some(a => matches(a, q))))
+      .sort((a, b) => Number(!!b.local) - Number(!!a.local) || (state.repoSort === 'recent' ? (b.lastUsed || 0) - (a.lastUsed || 0) : 0) || a.label.localeCompare(b.label));
+    const sortToggle = (id, glyph, title) =>
+      el(
+        'button',
+        {
+          className: `icon-btn toggle${state.repoSort === id ? ' active' : ''}`,
+          title,
+          'aria-label': title,
+          'aria-pressed': state.repoSort === id ? 'true' : 'false',
+          onclick: () => {
+            if (state.repoSort === id) return;
+            state.repoSort = id;
+            persist();
+            app.querySelector('.sidebar').replaceWith(renderSidebar());
+          },
+        },
+        icon(glyph)
+      );
     list.append(
       el(
         'div',
         { className: 'scope-head' },
         el('span', { className: 'label' }, 'Repositories'),
+        sortToggle('recent', 'history', 'Sort by last used'),
+        sortToggle('name', 'case-sensitive', 'Sort A-Z'),
         iconBtn('repo-create', 'Add Repo...', () => command('addRepo')),
         iconBtn('trash', 'Remove Repo...', () => command('removeRepo')),
         el('span', { className: 'count' }, visibleRepos.length)
@@ -373,7 +396,7 @@
         el('span', {}, 'Claude Harness'),
         el('span', { className: 'spacer' }),
         iconBtn('home', 'Overview', () => showRepo(undefined)),
-        iconBtn('table', 'Fleet overview', () => showPage('fleet')),
+        iconBtn('dashboard', 'Fleet overview', () => showPage('fleet')),
         iconBtn('package', 'Marketplace health', () => showPage('marketplaces')),
         iconBtn('add', 'New...', () => command('create')),
         iconBtn('refresh', 'Refresh', () => command('refresh'))
@@ -784,7 +807,7 @@
       'section',
       { className: 'main' },
       pageHead(
-        'table',
+        'dashboard',
         'Fleet overview',
         rows ? `${rows.length} repositories` : 'Reading...',
         std() ? iconBtn('checklist', 'Check every repo against the harness standard', () => command('checkRepos')) : null,
@@ -1699,14 +1722,36 @@
   // Claude Code's agent colors; an agent definition's `color` field or a teammate's spawn color wins over the palette.
   const AGENT_COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'];
 
+  // The palette classes c0 to c5 by the hue they paint, so a palette type and a named type of one hue count as a clash.
+  const PALETTE_HUES = ['blue', 'green', 'orange', 'purple', 'yellow', 'red'];
+
   function colorsOf(d) {
     const map = new Map();
-    for (const a of d.agents) if (!map.has(a.type)) map.set(a.type, map.size % 6);
-    const typeTone = type => {
-      const named = (d.agentColors || {})[type];
-      return AGENT_COLORS.includes(named) ? `ac-${named}` : `c${map.get(type)}`;
-    };
-    const tone = a => (AGENT_COLORS.includes(a.color) ? `ac-${a.color}` : typeTone(a.type));
+    const namedOf = type => (AGENT_COLORS.includes((d.agentColors || {})[type]) ? d.agentColors[type] : undefined);
+    for (const a of d.agents) if (!map.has(a.type)) map.set(a.type, -1);
+    // A type without its own color takes a palette hue no named type uses, while one is left.
+    const taken = new Set([...map.keys()].map(namedOf).filter(Boolean));
+    let next = 0;
+    for (const type of map.keys()) {
+      if (namedOf(type)) continue;
+      const free = PALETTE_HUES.findIndex(h => !taken.has(h));
+      const i = free >= 0 ? free : next++ % PALETTE_HUES.length;
+      taken.add(PALETTE_HUES[i]);
+      map.set(type, i);
+    }
+    const baseOf = type => (namedOf(type) ? `ac-${namedOf(type)}` : `c${map.get(type)}`);
+    const hueOf = base => (base.startsWith('ac-') ? base.slice(3) : PALETTE_HUES[Number(base.slice(1))]);
+    // Types that share a hue keep it; the second and third get a lighter and a deeper shade.
+    const shade = new Map();
+    const seen = new Map();
+    for (const type of map.keys()) {
+      const hue = hueOf(baseOf(type));
+      const k = seen.get(hue) || 0;
+      seen.set(hue, k + 1);
+      shade.set(type, k ? ` tint-${((k - 1) % 2) + 1}` : '');
+    }
+    const typeTone = type => `${baseOf(type)}${shade.get(type) || ''}`;
+    const tone = a => (AGENT_COLORS.includes(a.color) && `ac-${a.color}` !== baseOf(a.type) ? `ac-${a.color}` : typeTone(a.type));
     return { tone, typeTone, types: [...map.keys()] };
   }
 
@@ -1898,7 +1943,7 @@
 
   function renderAgent(d) {
     const a = d.agents.find(x => x.id === (state.session && state.session.selected));
-    if (!a) return el('div', { className: 'agent-detail empty flush' }, d.agents.length ? 'Click a lane to see that agent: its brief, its report, its tools and tokens.' : 'No subagent ran in this session.');
+    if (!a) return el('div', { className: 'agent-detail empty flush', hidden: d.agents.length > 0 }, d.agents.length ? '' : 'No subagent ran in this session.');
     const parent = a.parent && d.agents.find(x => x.id === a.parent);
     const facts = [
       ['Type', a.type],
@@ -2006,41 +2051,130 @@
   const tokensOf = u => u.input + u.cacheCreate + u.cacheRead + u.output;
   const laneName = a => (a.type === 'claude' && a.name ? a.name : shortType(a.type));
 
+  // The Sum / Full timeline switch above a diagram; `pick` stores the mode and redraws, the focus stays on the button.
+  function modeSwitch(host, modes, current, label, pick) {
+    return el(
+      'div',
+      { className: 'dg-modes', role: 'group', 'aria-label': label },
+      modes.map(([id, text, glyph, about]) => {
+        const tip = target => {
+          const r = target.getBoundingClientRect();
+          placeCard(`mode:${id}`, () => tabTip(text, glyph, about), { x: r.left - 14, y: r.bottom - 6 });
+        };
+        return el(
+          'button',
+          {
+            className: `view-tab dg-mode${current === id ? ' active' : ''}`,
+            'aria-pressed': current === id ? 'true' : 'false',
+            'aria-description': about,
+            onclick: () => {
+              hideHover();
+              pick(id);
+              persist();
+              const b = host.querySelector(`.dg-mode[data-mode="${id}"]`);
+              if (b) b.focus();
+            },
+            onmouseenter: e => tip(e.currentTarget),
+            onmouseleave: hideHover,
+            onfocus: e => tip(e.currentTarget),
+            onblur: hideHover,
+            'data-mode': id,
+          },
+          icon(glyph),
+          el('span', {}, text)
+        );
+      })
+    );
+  }
+
+  const MAP_MODES = [
+    ['sum', 'Sum', 'merge', 'Agents summed up by type under whoever started them; click a type to drill down to its runs.'],
+    ['timeline', 'Full timeline', 'history', 'Your prompts as a process from top to bottom: each delegation branches into the agents it started, and their reports join the main thread again.'],
+  ];
+
+  // Every row in the map shows the same facts in the same right-aligned columns: model (runs for a type), run time, tools, messages.
+  const MAP_ROW_H = 30;
+  const MAP_FACT_ENDS = [244, 172, 100, 28];
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const fmtRun = ms => (ms > 0 ? fmtDur(ms) : '-');
+  const mapCells = (right, y, list) => list.map((t, i) => svg('text', { x: right - MAP_FACT_ENDS[i], y, class: 'dg-meta', 'text-anchor': 'end' }, t));
+  const mapNameRoom = (x, right) => Math.floor((right - MAP_FACT_ENDS[0] - 70 - x) / 6.6);
+  function mapFacts(d) {
+    const msgs = new Map();
+    for (const e of d.events) if (e.kind === 'message' && e.agent) msgs.set(e.agent, (msgs.get(e.agent) || 0) + 1);
+    return { msgs, toolsOf: a => Object.values(a.tools).reduce((n, v) => n + v, 0), runOf: a => (typeof a.start === 'number' && a.end > a.start ? a.end - a.start : 0) };
+  }
+  function mapAgentRow(a, x, y, right, d, colors, msgs, selected) {
+    const { toolsOf, runOf } = mapFacts({ events: [] });
+    const family = a.model ? String(a.model).replace(/^claude-/, '').replace(/-\d.*$/, '') : '-';
+    const g = svg(
+      'g',
+      { class: 'dg-agent' },
+      svg('rect', { x, y, width: right - x, height: MAP_ROW_H, rx: 5, class: `dg-node${a.status === 'failed' ? ' failed' : a.status === 'unknown' ? ' silent' : ''}${selected === a.id ? ' sel' : ''}` }),
+      svg('rect', { x, y, width: 4, height: MAP_ROW_H, class: `dg-tone ${colors.tone(a)}` }),
+      svg('text', { x: x + 12, y: y + 19, class: 'dg-label' }, clip(laneName(a), mapNameRoom(x, right))),
+      mapCells(right, y + 19, [family, fmtRun(runOf(a)), plural(toolsOf(a), 'tool'), plural(msgs.get(a.id) || 0, 'msg')])
+    );
+    bindAgent(g, a, d, colors);
+    return g;
+  }
+
   function drawMap(host, d) {
     const W = widthOf(host, 560);
     const colors = colorsOf(d);
     const selected = state.session && state.session.selected;
+    const mode = state.mapMode === 'sum' ? 'sum' : 'timeline';
     const PAD = 12;
-    const ROW = 28;
-    const NODE_H = 22;
+    const ROW = 36;
+    const NODE_H = MAP_ROW_H;
     const MAIN_W = 150;
-    const depthMax = d.agents.reduce((n, a) => Math.max(n, a.depth), 0);
-    const nodeW = Math.max(170, Math.min(280, Math.floor((W - PAD * 2 - MAIN_W - 70) / (depthMax + 1)) - 44));
-    const colX = depth => PAD + MAIN_W + 70 + depth * (nodeW + 44);
-    const msgs = new Map();
-    for (const e of d.events) if (e.kind === 'message' && e.agent) msgs.set(e.agent, (msgs.get(e.agent) || 0) + 1);
-    // Rows in tree order; a new launch round (over 60 s after the previous root launch) starts after a gap.
+    // Sum: one node per agent type under whoever started it; a type drills down to its runs, a run shows the types it started.
+    const ids = new Set(d.agents.map(a => a.id));
+    const kids = new Map();
+    for (const a of d.agents) if (a.parent && ids.has(a.parent)) kids.set(a.parent, [...(kids.get(a.parent) || []), a]);
+    const groupsOf = (list, key) => {
+      const byType = new Map();
+      for (const a of list) byType.set(a.type, [...(byType.get(a.type) || []), a]);
+      return [...byType.entries()].map(([type, agents]) => {
+        const k = `${key}/${type}`;
+        return { key: k, type, agents, children: agents.map(a => ({ key: `${k}/${a.id}`, agent: a, children: groupsOf(kids.get(a.id) || [], `${k}/${a.id}`) })) };
+      });
+    };
+    const open = state.session ? (state.session.mapOpen = state.session.mapOpen || {}) : {};
+    const isOpen = n => n.children.length > 0 && (n.agent ? true : !!open[n.key]);
+    const shown = [];
+    if (mode === 'sum') {
+      const walk = (n, depth, parent) => {
+        shown.push({ n, depth, parent });
+        if (isOpen(n)) n.children.forEach(c => walk(c, depth + 1, n));
+      };
+      groupsOf(d.agents.filter(a => !a.parent || !ids.has(a.parent)), 'map').forEach(g => walk(g, 0));
+    }
+    const sw = modeSwitch(host, MAP_MODES, mode, 'Delegation map views', id => {
+      state.mapMode = id;
+      drawMap(host, d);
+    });
+    if (mode === 'timeline') {
+      host.replaceChildren(sw, drawProcess(W, d));
+      return;
+    }
+    // A tree table across the full width: rows indent by depth and end at the right edge, the facts sit in
+    // right-aligned columns at the same place on every row.
+    const INDENT = 22;
+    const left0 = PAD + MAIN_W + 48;
+    const width = Math.max(W, left0 + 560 + PAD);
+    const rowRight = width - PAD;
+    const { msgs, toolsOf, runOf } = mapFacts(d);
     const pos = new Map();
-    const rounds = [];
     let y = PAD + 18;
-    let lastRoot;
-    for (const a of d.agents) {
-      if (!a.parent) {
-        const fresh = !rounds.length || typeof a.launchedAt !== 'number' || typeof lastRoot !== 'number' || a.launchedAt - lastRoot > 60000;
-        if (fresh) {
-          if (rounds.length) y += 14;
-          rounds.push({ agents: [] });
-        }
-        rounds[rounds.length - 1].agents.push(a);
-        lastRoot = a.launchedAt;
-      }
-      pos.set(a.id, { x: colX(a.depth), y });
+    for (const r of shown) {
+      pos.set(r.n.key, { x: left0 + r.depth * INDENT, y });
       y += ROW;
     }
-    const H = y + PAD;
+    const H = Math.max(y, PAD + 18 + 72) + PAD;
     const mainY = PAD + 18;
-    const mainH = Math.max(56, Math.min(H - mainY - PAD, 72));
-    const root = svg('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'tl dg', role: 'img', 'aria-label': 'Delegation map' });
+    const mainH = 72;
+    const root = svg('svg', { width, height: H, viewBox: `0 0 ${width} ${H}`, class: 'tl dg', role: 'img', 'aria-label': 'Delegation map, summed by agent type' });
     const mainG = svg(
       'g',
       { class: 'dg-main' },
@@ -2053,52 +2187,164 @@
     const mainRight = PAD + MAIN_W;
     const mainMid = mainY + mainH / 2;
     const edges = svg('g', {});
-    for (const r of rounds) {
-      const ys = r.agents.map(a => pos.get(a.id).y + NODE_H / 2);
-      const top = Math.min(...ys);
-      const bottom = Math.max(...ys);
-      const bx = colX(0) - 22;
-      const mid = (top + bottom) / 2;
-      const elbow = mainRight + (bx - mainRight) / 2;
-      edges.append(svg('path', { d: `M ${mainRight} ${mainMid} H ${elbow} V ${mid} H ${bx}`, class: 'dg-edge' }));
-      if (r.agents.length > 1) {
-        edges.append(svg('line', { x1: bx, x2: bx, y1: top, y2: bottom, class: 'dg-edge' }));
-        edges.append(svg('text', { x: bx - 6, y: top - 4, class: 'dg-meta', 'text-anchor': 'end' }, `×${r.agents.length}`));
+    for (const r of shown) {
+      const c = pos.get(r.n.key);
+      if (r.parent) {
+        const p = pos.get(r.parent.key);
+        edges.append(svg('path', { d: `M ${p.x + 10} ${p.y + NODE_H} V ${c.y + NODE_H / 2} H ${c.x}`, class: 'dg-edge' }));
+      } else {
+        const elbow = mainRight + (left0 - mainRight) / 2;
+        edges.append(svg('path', { d: `M ${mainRight} ${mainMid} H ${elbow} V ${c.y + NODE_H / 2} H ${left0}`, class: 'dg-edge' }));
       }
-      for (const yy of ys) edges.append(svg('line', { x1: bx, x2: colX(0), y1: yy, y2: yy, class: 'dg-edge' }));
-      if (r.agents.length > 1 && r.agents.every(a => a.teammate)) {
-        edges.append(svg('rect', { x: colX(0) - 6, y: top - NODE_H / 2 - 16, width: nodeW + 12, height: bottom - top + NODE_H + 22, rx: 6, class: 'dg-team' }));
-        edges.append(svg('text', { x: colX(0), y: top - NODE_H / 2 - 5, class: 'dg-meta' }, `team · ${r.agents.length}`));
-      }
-    }
-    for (const a of d.agents) {
-      if (!a.parent || !pos.has(a.parent)) continue;
-      const p = pos.get(a.parent);
-      const c = pos.get(a.id);
-      const x1 = p.x + nodeW;
-      const x2 = c.x;
-      const elbow = x1 + (x2 - x1) / 2;
-      edges.append(svg('path', { d: `M ${x1} ${p.y + NODE_H / 2} H ${elbow} V ${c.y + NODE_H / 2} H ${x2}`, class: 'dg-edge' }));
     }
     root.append(edges, mainG);
-    for (const a of d.agents) {
-      const p = pos.get(a.id);
-      const family = a.model ? String(a.model).replace(/^claude-/, '').replace(/-\d.*$/, '') : '';
-      const m = msgs.get(a.id);
-      const meta = [m ? `${m} msg${m === 1 ? '' : 's'}` : '', family, typeof a.start === 'number' && a.end > a.start ? fmtDur(a.end - a.start) : '', `${Object.values(a.tools).reduce((n, v) => n + v, 0)} tools`].filter(Boolean).join(' · ');
-      const metaChars = Math.max(0, Math.floor((nodeW - 24) / 6.2) - laneName(a).length - 2);
+    const agentNode = (a, p) => root.append(mapAgentRow(a, p.x, p.y, rowRight, d, colors, msgs, selected));
+    // A type node: how many runs, their summed run time, tools and messages; a click drills down to the runs.
+    const typeNode = (n, p) => {
+      const runs = n.agents;
+      const failed = runs.filter(a => a.status === 'failed').length;
+      const name = shortType(n.type);
+      const toggle = refocus => {
+        open[n.key] = !isOpen(n);
+        hideHover();
+        drawMap(host, d);
+        if (!refocus) return;
+        const g = [...host.querySelectorAll('.dg-decision')].find(x => x.dataset.key === n.key);
+        if (g) g.focus();
+      };
       const g = svg(
         'g',
-        { class: 'dg-agent' },
-        svg('rect', { x: p.x, y: p.y, width: nodeW, height: NODE_H, rx: 4, class: `dg-node${a.status === 'failed' ? ' failed' : a.status === 'unknown' ? ' silent' : ''}${selected === a.id ? ' sel' : ''}` }),
-        svg('rect', { x: p.x, y: p.y, width: 4, height: NODE_H, class: `dg-tone ${colors.tone(a)}` }),
-        svg('text', { x: p.x + 10, y: p.y + 15, class: 'dg-label' }, clip(laneName(a), Math.floor((nodeW - 20) / 6.4))),
-        metaChars > 6 ? svg('text', { x: p.x + nodeW - 6, y: p.y + 15, class: 'dg-meta', 'text-anchor': 'end' }, a.status === 'failed' ? 'failed' : clip(meta, metaChars)) : null
+        { class: 'dg-decision', tabindex: '0', role: 'button', 'aria-expanded': isOpen(n) ? 'true' : 'false', 'aria-label': `${name}, ${runs.length} ${runs.length === 1 ? 'run' : 'runs'}` },
+        svg('rect', { x: p.x, y: p.y, width: rowRight - p.x, height: NODE_H, rx: 5, class: `dg-node${failed ? ' failed' : ''}` }),
+        svg('rect', { x: p.x, y: p.y, width: 4, height: NODE_H, class: `dg-tone ${colors.tone(runs[0])}` }),
+        svg('text', { x: p.x + 12, y: p.y + 19, class: 'dg-label strong' }, clip(name, mapNameRoom(p.x, rowRight))),
+        svg('text', { x: rowRight - 10, y: p.y + 19, class: 'dg-fold', 'text-anchor': 'end' }, isOpen(n) ? '▾' : '▸'),
+        mapCells(rowRight, p.y + 19, [
+          plural(runs.length, 'run'),
+          fmtRun(runs.reduce((s, a) => s + runOf(a), 0)),
+          plural(runs.reduce((s, a) => s + toolsOf(a), 0), 'tool'),
+          plural(runs.reduce((s, a) => s + (msgs.get(a.id) || 0), 0), 'msg'),
+        ])
       );
-      bindAgent(g, a, d, colors);
+      g.dataset.key = n.key;
+      g.addEventListener('click', () => toggle());
+      g.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        toggle(true);
+      });
       root.append(g);
+    };
+    for (const r of shown) (r.n.agent ? agentNode(r.n.agent, pos.get(r.n.key)) : typeNode(r.n, pos.get(r.n.key)));
+    host.replaceChildren(sw, root);
+  }
+
+  // Full timeline as a process from top to bottom: your prompts are the steps of the main thread; a delegation branches
+  // to the agents it started, and each agent's report joins the main thread again (dashed) after the step it reached.
+  function drawProcess(W, d) {
+    const steps = [...(d.decisions || [])].sort((p, q) => p.at - q.at);
+    if (!steps.length) return el('div', { className: 'empty flush dg-empty' }, 'No prompts in this session.');
+    const colors = colorsOf(d);
+    const selected = state.session && state.session.selected;
+    const { msgs } = mapFacts(d);
+    const PAD = 12;
+    const STEP_W = 124;
+    const STEP_H = 34;
+    const ROW = 36;
+    const GAP = 22;
+    const INDENT = 22;
+    const stepX = PAD + 10;
+    const spineX = stepX + STEP_W / 2;
+    const returnX = stepX + STEP_W + 14;
+    const branchX = returnX + 16;
+    const agentsX = branchX + 18;
+    const width = Math.max(W, agentsX + 560 + PAD);
+    const right = width - PAD;
+    const colOfTime = t => steps.reduce((c, s, i) => (typeof t === 'number' && s.at <= t ? i : c), 0);
+    const byId = new Map(d.agents.map(a => [a.id, a]));
+    const startOf = a => (typeof a.launchedAt === 'number' ? a.launchedAt : typeof a.start === 'number' ? a.start : 0);
+    const ordered = [...d.agents].sort((p, q) => startOf(p) - startOf(q));
+    // Each run: the step that started it (its parent's step for a nested agent) and the step its report reached.
+    const task = new Map();
+    const place = a => {
+      if (task.has(a.id)) return task.get(a.id);
+      const parent = a.parent && byId.get(a.parent) ? place(byId.get(a.parent)) : undefined;
+      const c = parent ? parent.c : colOfTime(startOf(a));
+      const reported = a.reports && a.reports.length ? a.reports[0] : endOfAgent(a);
+      const t = { a, c, rc: Math.max(c, colOfTime(reported)), depth: parent ? parent.depth + 1 : 0, parent };
+      task.set(a.id, t);
+      return t;
+    };
+    ordered.forEach(place);
+    const runs = ordered.map(a => task.get(a.id));
+    // Each step owns a block of rows: the runs it started in launch order, each nested run right under its parent.
+    const kids = new Map();
+    for (const t of runs) if (t.parent) kids.set(t.parent.a.id, [...(kids.get(t.parent.a.id) || []), t]);
+    const blocks = steps.map(() => []);
+    const add = (t, list) => {
+      list.push(t);
+      (kids.get(t.a.id) || []).forEach(k => add(k, list));
+    };
+    for (const t of runs) if (!t.parent) add(t, blocks[t.c]);
+    const startY = PAD + 8;
+    const stepTop = [];
+    const blockEnd = [];
+    let y = startY + 22;
+    steps.forEach((s, i) => {
+      stepTop.push(y);
+      blocks[i].forEach((t, k) => {
+        t.x = agentsX + t.depth * INDENT;
+        t.y = y + 2 + k * ROW;
+      });
+      const h = Math.max(STEP_H, blocks[i].length * ROW - (ROW - MAP_ROW_H) + 4);
+      blockEnd.push(y + h);
+      y += h + GAP;
+    });
+    const endY = y + 2;
+    const H = endY + 8 + PAD;
+    const joinY = i => blockEnd[i] + GAP / 2;
+    const root = svg('svg', { width, height: H, viewBox: `0 0 ${width} ${H}`, class: 'tl dg', role: 'img', 'aria-label': 'Delegation process, prompt by prompt' });
+    root.append(svg('defs', {}, svg('marker', { id: 'dg-arrow', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }, svg('path', { d: 'M 0 0 L 8 4 L 0 8 z', class: 'dg-arrowhead' }))));
+    const edges = svg('g', {});
+    const arrow = (dPath, back) => edges.append(svg('path', { d: dPath, class: `dg-edge${back ? ' back' : ''}`, 'marker-end': 'url(#dg-arrow)' }));
+    // The main thread's flow: start, every prompt in order, end.
+    arrow(`M ${spineX} ${startY + 7} V ${stepTop[0]}`);
+    steps.forEach((s, i) => arrow(`M ${spineX} ${stepTop[i] + STEP_H} V ${i + 1 < steps.length ? stepTop[i + 1] : endY - 7}`));
+    for (const t of runs) {
+      if (t.parent) {
+        const p = t.parent;
+        arrow(`M ${p.x + 10} ${p.y + MAP_ROW_H} V ${t.y + MAP_ROW_H / 2} H ${t.x}`);
+      } else {
+        arrow(`M ${stepX + STEP_W} ${stepTop[t.c] + STEP_H / 2} H ${branchX} V ${t.y + 11} H ${t.x}`);
+        arrow(`M ${t.x} ${t.y + 21} H ${returnX} V ${joinY(t.rc)} H ${spineX + 1}`, true);
+      }
     }
-    host.replaceChildren(root);
+    root.append(edges);
+    root.append(svg('circle', { cx: spineX, cy: startY, r: 7, class: 'dg-event' }), svg('circle', { cx: spineX, cy: endY, r: 7, class: 'dg-event end' }));
+    // A team that ran together forks at a parallel gateway beside its prompt.
+    steps.forEach((s, i) => {
+      if (s.launches < 2 || s.shape !== 'agents together') return;
+      const gx = branchX;
+      const gy = stepTop[i] + STEP_H / 2;
+      root.append(svg('path', { d: `M ${gx} ${gy - 7} L ${gx + 7} ${gy} L ${gx} ${gy + 7} L ${gx - 7} ${gy} Z`, class: 'dg-gateway' }), svg('path', { d: `M ${gx - 3.5} ${gy} H ${gx + 3.5} M ${gx} ${gy - 3.5} V ${gy + 3.5}`, class: 'dg-edge' }));
+    });
+    steps.forEach((s, i) => {
+      const yy = stepTop[i];
+      const g = svg(
+        'g',
+        { class: 'dg-decision' },
+        svg('rect', { x: stepX, y: yy, width: STEP_W, height: STEP_H, rx: 5, class: `dg-node${s.action === 'delegated' ? ' gold' : ''}` }),
+        svg('text', { x: stepX + 8, y: yy + 14, class: 'dg-label strong' }, fmtTime(s.at)),
+        svg('text', { x: stepX + 8, y: yy + 28, class: 'dg-meta' }, clip(DECISION_LABELS[s.action] || s.action, Math.floor((STEP_W - 14) / 5.6)))
+      );
+      const card = e => placeCard(`step:${s.at}`, () => decisionCard(fmtTime(s.at), [s], d), { x: e.clientX, y: e.clientY });
+      g.addEventListener('mouseenter', card);
+      g.addEventListener('mousemove', card);
+      g.addEventListener('mouseleave', hideHover);
+      root.append(g);
+    });
+    for (const t of runs) root.append(mapAgentRow(t.a, t.x, t.y, right, d, colors, msgs, selected));
+    return root;
   }
 
   const ACTIONS = ['delegated', 'worked on the main thread', 'followed up an agent', 'answered directly'];
@@ -2347,39 +2593,10 @@
       root.append(g);
     };
     drawNode(tree);
-    const modes = el(
-      'div',
-      { className: 'dg-modes', role: 'group', 'aria-label': 'Decision views' },
-      DECISION_MODES.map(([id, text, glyph, about]) => {
-        const tip = target => {
-          const r = target.getBoundingClientRect();
-          placeCard(`mode:${id}`, () => tabTip(text, glyph, about), { x: r.left - 14, y: r.bottom - 6 });
-        };
-        return el(
-          'button',
-          {
-            className: `view-tab dg-mode${mode === id ? ' active' : ''}`,
-            'aria-pressed': mode === id ? 'true' : 'false',
-            'aria-description': about,
-            onclick: () => {
-              state.decisionMode = id;
-              persist();
-              hideHover();
-              drawDecisions(host, d);
-              const b = host.querySelector(`.dg-mode[data-mode="${id}"]`);
-              if (b) b.focus();
-            },
-            onmouseenter: e => tip(e.currentTarget),
-            onmouseleave: hideHover,
-            onfocus: e => tip(e.currentTarget),
-            onblur: hideHover,
-            'data-mode': id,
-          },
-          icon(glyph),
-          el('span', {}, text)
-        );
-      })
-    );
+    const modes = modeSwitch(host, DECISION_MODES, mode, 'Decision views', id => {
+      state.decisionMode = id;
+      drawDecisions(host, d);
+    });
     host.replaceChildren(modes, root);
   }
 
@@ -2410,20 +2627,23 @@
     for (let n = 0; n <= max; n += tick) {
       root.append(svg('line', { x1: LEFT, x2: W - 14, y1: yOf(n), y2: yOf(n), class: 'dg-hgrid' }), svg('text', { x: LEFT - 6, y: yOf(n) + 4, class: 'tl-axis', 'text-anchor': 'end' }, String(n)));
     }
-    for (const s of steps) {
-      let base = 0;
-      for (const type of colors.types) {
-        const n = s.by.get(type) || 0;
-        if (!n) continue;
-        root.append(
-          svg(
-            'rect',
-            { x: x(s.a), y: yOf(base + n), width: Math.max(1, x(s.b) - x(s.a)), height: yOf(base) - yOf(base + n), class: `dg-area ${colors.typeTone(type)}` },
-            svg('title', {}, `${fmtTime(s.a)}: ${s.n} running (${[...s.by.entries()].map(([k, v]) => `${v} ${shortType(k)}`).join(', ')})`)
-          )
-        );
-        base += n;
-      }
+    // One rounded bar per run in its agent's color. A run takes the lowest lane free at its start and keeps it
+    // until it ends, so the bars never move and the height is the number of agents running.
+    const ordered = [...runs].sort((p, q) => p.start - q.start || endOfAgent(q) - endOfAgent(p));
+    const laneEnds = [];
+    const pill = (x0, x1, y0, y1) => {
+      const r = Math.min(10, (x1 - x0) / 2, (y1 - y0) / 2);
+      return `M ${x0 + r} ${y0} H ${x1 - r} A ${r} ${r} 0 0 1 ${x1} ${y0 + r} V ${y1 - r} A ${r} ${r} 0 0 1 ${x1 - r} ${y1} H ${x0 + r} A ${r} ${r} 0 0 1 ${x0} ${y1 - r} V ${y0 + r} A ${r} ${r} 0 0 1 ${x0 + r} ${y0} Z`;
+    };
+    for (const a of ordered) {
+      let lane = laneEnds.findIndex(e => e <= a.start);
+      if (lane < 0) lane = laneEnds.length;
+      laneEnds[lane] = endOfAgent(a);
+      const d0 = pill(x(a.start), Math.max(x(endOfAgent(a)), x(a.start) + 2), yOf(lane + 1) + 2, yOf(lane) - 2);
+      const tone = colors.typeTone(a.type);
+      const g = svg('g', { class: 'dg-agent' }, svg('path', { d: d0, class: `dg-area ${tone}` }), svg('path', { d: d0, class: `dg-ridge ${tone}` }));
+      bindAgent(g, a, d, colors);
+      root.append(g);
     }
     const peak = steps.find(s => s.n === max);
     if (peak) {
@@ -2570,11 +2790,13 @@
     const mx = median(pts.map(p => p.rt));
     const my = median(pts.map(p => p.tok));
     root.append(svg('line', { x1: sx(mx), x2: sx(mx), y1: T, y2: H - B, class: 'dg-median' }), svg('line', { x1: L, x2: W - R, y1: sy(my), y2: sy(my), class: 'dg-median' }));
-    const top = [...pts].sort((p, q) => q.tok - p.tok).slice(0, 3);
-    for (const p of [...pts].sort((p, q) => q.tools - p.tools)) {
-      const r = Math.min(14, 3 + Math.sqrt(p.tools) * 1.1);
+    // Circle area follows the agent's cost; the costliest is drawn first so smaller ones stay on top.
+    const costOf = p => p.a.usage.cost || 0;
+    const maxCost = Math.max(0, ...pts.map(costOf));
+    for (const p of [...pts].sort((p, q) => costOf(q) - costOf(p))) {
+      const r = 4 + (maxCost ? Math.sqrt(costOf(p) / maxCost) : 0) * 18;
       const g = svg('g', { class: 'dg-agent' }, svg('circle', { cx: sx(p.rt), cy: sy(p.tok), r, class: `dg-dot ${colors.tone(p.a)}${selected === p.a.id ? ' sel' : ''}` }));
-      if (top.includes(p)) g.append(svg('text', { x: sx(p.rt) + r + 4, y: sy(p.tok) + 4, class: 'dg-label' }, laneName(p.a)));
+      g.append(svg('text', { x: sx(p.rt) + r + 4, y: sy(p.tok) + 4, class: 'dg-label' }, laneName(p.a)));
       bindAgent(g, p.a, d, colors);
       root.append(g);
     }
@@ -2601,11 +2823,11 @@
     const main = el('span', { className: 'legend-item' }, el('span', { className: 'swatch tone-main' }), 'main thread');
     const parts = {
       timeline: [...types, fact('● prompt'), fact('○ result'), fact('▼ message'), el('span', { className: 'legend-item' }, el('span', { className: 'stop-glyph', 'aria-hidden': 'true' }, '×'), 'stopped')],
-      map: [main, ...types, fact('box: team'), fact('N msgs: messages to the agent'), fact('red outline: failed')],
+      map: [main, ...types],
       decisions: [fact('one prompt = the time until the next prompt'), fact('line width: prompts'), fact('gold: delegated'), fact('▸ click to drill down, ▾ to collapse')],
-      concurrency: [...types, fact('height: agents running'), fact('ticks: prompts')],
+      concurrency: [...types, fact('height: agents running'), fact('one bar per agent run'), fact('ticks: prompts')],
       flow: [main, ...types, fact('width: tokens in, cache and out')],
-      scatter: [...types, fact('size: tool uses'), fact('dashed: medians'), fact('log scales')],
+      scatter: [...types, fact('size: cost'), fact('dashed: medians'), fact('log scales')],
     };
     return parts[currentView()];
   }

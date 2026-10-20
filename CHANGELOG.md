@@ -1,6 +1,29 @@
 # Changelog
 
-All notable changes to Claude Harness are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions with no version change in the package.json history (0.1.3, 0.1.5 to 0.1.18, 0.1.20 to 0.1.24 and 0.1.27) have no entry.
+All notable changes to Claude Harness are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions with no version change in the package.json history (0.1.3, 0.1.5 to 0.1.18, 0.1.20 to 0.1.24, 0.1.27, 0.2.1 and 0.2.3 to 0.2.11) have no entry.
+
+## [0.2.12] - 2026-10-21
+
+### Added
+
+- Delegation map has two modes above the diagram, Sum and Full timeline. Sum adds up the agents by type under whoever started them, and a click on a type drills down to its runs. Full timeline reads your prompts from top to bottom, with each delegation branching into the agents it started. Each mode button has a hover tip. See [Sessions](docs/sessions.md#delegation-views).
+- Every row of the Delegation map shows the model, run time, tools and messages in the same columns. A type row shows its run count in the model column, with the summed run time, tools and messages of its runs.
+- Repositories in the main window sidebar sort by last used, the default, or A-Z, with two buttons in the section header. Repos open in this window come first. See [Main window](docs/main-window.md#sidebar).
+- Agents of enabled plugins appear in the global Agents list as read-only copies. See [Plugins](docs/plugins.md).
+
+### Changed
+
+- Lane colors on the session page: a type without its own color takes a palette hue that no named type uses, while one is left. Types that share a hue get a lighter and a deeper shade. See [Sessions](docs/sessions.md#delegation-views).
+- The Fleet overview button in the activity bar uses the dashboard icon and sits before Open Claude. See [Fleet overview](docs/fleet-overview.md).
+- The Concurrency view draws one bar per agent run, in its agent type's color. See [Sessions](docs/sessions.md#delegation-views).
+- The Scatter view sizes each dot by the agent's cost instead of its tool uses. The costliest agent is drawn first, so the smaller dots stay on top. See [Sessions](docs/sessions.md#delegation-views).
+
+## [0.2.2] - 2026-10-20
+
+### Added
+
+- Decisions view on the session page has two modes, Sum and Full timeline, each with a hover tip. Sum lists your prompts summed up: what the main thread did, which agent or team it launched and how it ended. Full timeline lists every prompt in order, with the agent or team each one launched. See [Sessions](docs/sessions.md#decisions).
+- Decisions nodes drill down. Click a node with children to open or fold it. Sum opens three levels by default, and Full timeline opens every level.
 
 ## [0.2.0] - 2026-10-20
 

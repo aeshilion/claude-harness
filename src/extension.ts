@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Constitution } from './constitution';
-import { FileEdit, fleetRow, guardInfo, guardReasons, marketplaceHealth, renameCatalog, renameCommands, renameInSettings } from './fleet';
+import { FileEdit, fleetRow, guardInfo, guardReasons, lastSessionAt, marketplaceHealth, renameCatalog, renameCommands, renameInSettings } from './fleet';
 import { registerLenses } from './lenses';
 import { NO_PROVIDER, Provider, ScaffoldForm, applyFix, findProvider, parseScaffoldOutput, previewFix, runScript, scaffoldArgs } from './standard';
 import {
@@ -130,7 +130,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const refresh = () => {
     const folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-    views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, local: s !== global && folders.some(f => samePath(f, s.base)), categories: scan(s) }));
+    views = scopes.map(s => ({ id: s.id, label: s.label, path: s.base, local: s !== global && folders.some(f => samePath(f, s.base)), lastUsed: s !== global ? lastSessionAt(s.base) : undefined, categories: scan(s) }));
     const globalMcp = views[0].categories.find(c => c.kind === 'mcp');
     if (globalMcp) {
       for (const a of globalMcp.items) a.status = cliServers.find(c => c.name === a.name)?.status;
@@ -140,6 +140,15 @@ export function activate(context: vscode.ExtensionContext): void {
     plugins = pluginViews(global.root);
     loadProvider();
     linkCopies(views, plugins);
+    // A plugin enabled in your settings runs its agents as global agents, so they join the global Agents list, read-only.
+    const globalAgents = views[0].categories.find(c => c.kind === 'agent');
+    const enabledPlugins = new Set((views[0].categories.find(c => c.kind === 'plugin')?.items ?? []).filter(p => p.enabled).map(p => p.name));
+    if (globalAgents) {
+      for (const p of plugins.filter(v => enabledPlugins.has(v.id.slice('plugin:'.length))))
+        for (const a of p.categories.find(c => c.kind === 'agent')?.items ?? [])
+          globalAgents.items.push({ ...a, source: 'plugin', description: [`plugin ${p.id.slice('plugin:'.length).split('@')[0]}`, a.description].filter(Boolean).join(' · ') });
+      globalAgents.items.sort((x, y) => x.name.localeCompare(y.name));
+    }
     for (const a of views.flatMap(v => v.categories.find(c => c.kind === 'plugin')?.items ?? [])) if (pluginIsMod(global.root, a.name)) a.description += ' · mod';
     tree.setCategories(views[0].categories, views.slice(1));
     HarnessPanel.update();

@@ -43,6 +43,10 @@ Every command is in the **Claude Harness** category. Commands marked *hidden* do
 
 Provider commands appear when a harness standard provider plugin is installed.
 
+## Plugin agents
+
+In the tree, a plugin agent offers only **Open File** and **Reveal in File Explorer** on right-click. **Rename**, **Duplicate**, **Compare with Copy** and **Delete** are hidden for it. See [Plugins](plugins.md#agents-in-the-global-list).
+
 ## Add MCP Server
 
 Pick a repo or **Global**, type a name, then choose **Local command** or **HTTP URL** and enter the command line or the URL. A global server goes into `~/.claude.json`, a repo server into that repo's `.mcp.json`. A name that already exists in that file is refused. The new server opens when it is added. See [MCP servers](mcp-servers.md).

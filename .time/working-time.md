@@ -12,5 +12,9 @@
 | 2026-10-20 | 0.52 | 20:05 | 20:36 | Version 0.1.31: in-house checks kept out of the public extension, clearer command names, public docs limited to the general features |
 | 2026-10-20 | 0.52 | 20:24 | 21:07 | Version 0.2.0: each repository's Claude Code sessions with a timeline of how each one ran, and a list of the other sessions running now |
 | 2026-10-20 | 0.42 | 20:46 | 21:32 | Source type shown as an icon on the marketplace page, and docs screenshots retaken so they show only what each page explains |
+| 2026-10-20 | 0.75 | 22:55 | 23:40 | Versions 0.2.1 to 0.2.4: session decisions as a drill-down tree and a full timeline, distinct shades for agents of one color, an area chart for parallel agents and cost-sized scatter points |
+| 2026-10-20 | 0.25 | 23:34 | 23:55 | Versions 0.2.5 and 0.2.6: repository sorting and clearer parallel-work charts |
+| 2026-10-20 | 0.07 | 23:55 | 23:59 | Versions 0.2.7 and 0.2.8: delegation map switch between a summary by agent type and every run |
+| 2026-10-21 | 0.30 | 00:00 | 00:18 | Versions 0.2.9 to 0.2.12: delegation map as a top-to-bottom process with the same facts on every agent, and a full-width summary |
 
-**Total: 9.03h**
+**Total: 10.40h**

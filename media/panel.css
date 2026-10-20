@@ -169,6 +169,13 @@ input[type='checkbox'] {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
+.icon-btn.toggle.active {
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground);
+  outline: 1px solid var(--vscode-inputOption-activeBorder, transparent);
+  outline-offset: -1px;
+}
+
 .main {
   display: flex;
   flex-direction: column;
@@ -959,100 +966,129 @@ table.grid .cell {
 
 .tl .c0,
 .swatch.c0 {
-  fill: var(--vscode-charts-blue);
-  stroke: var(--vscode-charts-blue);
-  background: var(--vscode-charts-blue);
+  --tone: var(--vscode-charts-blue);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .c1,
 .swatch.c1 {
-  fill: var(--vscode-charts-green);
-  stroke: var(--vscode-charts-green);
-  background: var(--vscode-charts-green);
+  --tone: var(--vscode-charts-green);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .c2,
 .swatch.c2 {
-  fill: var(--vscode-charts-orange);
-  stroke: var(--vscode-charts-orange);
-  background: var(--vscode-charts-orange);
+  --tone: var(--vscode-charts-orange);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .c3,
 .swatch.c3 {
-  fill: var(--vscode-charts-purple);
-  stroke: var(--vscode-charts-purple);
-  background: var(--vscode-charts-purple);
+  --tone: var(--vscode-charts-purple);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .c4,
 .swatch.c4 {
-  fill: var(--vscode-charts-yellow);
-  stroke: var(--vscode-charts-yellow);
-  background: var(--vscode-charts-yellow);
+  --tone: var(--vscode-charts-yellow);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .c5,
 .swatch.c5 {
-  fill: var(--vscode-charts-red);
-  stroke: var(--vscode-charts-red);
-  background: var(--vscode-charts-red);
+  --tone: var(--vscode-charts-red);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-red,
 .swatch.ac-red {
-  fill: var(--vscode-charts-red);
-  stroke: var(--vscode-charts-red);
-  background: var(--vscode-charts-red);
+  --tone: var(--vscode-charts-red);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-blue,
 .swatch.ac-blue {
-  fill: var(--vscode-charts-blue);
-  stroke: var(--vscode-charts-blue);
-  background: var(--vscode-charts-blue);
+  --tone: var(--vscode-charts-blue);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-green,
 .swatch.ac-green {
-  fill: var(--vscode-charts-green);
-  stroke: var(--vscode-charts-green);
-  background: var(--vscode-charts-green);
+  --tone: var(--vscode-charts-green);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-yellow,
 .swatch.ac-yellow {
-  fill: var(--vscode-charts-yellow);
-  stroke: var(--vscode-charts-yellow);
-  background: var(--vscode-charts-yellow);
+  --tone: var(--vscode-charts-yellow);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-purple,
 .swatch.ac-purple {
-  fill: var(--vscode-charts-purple);
-  stroke: var(--vscode-charts-purple);
-  background: var(--vscode-charts-purple);
+  --tone: var(--vscode-charts-purple);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-orange,
 .swatch.ac-orange {
-  fill: var(--vscode-charts-orange);
-  stroke: var(--vscode-charts-orange);
-  background: var(--vscode-charts-orange);
+  --tone: var(--vscode-charts-orange);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-pink,
 .swatch.ac-pink {
-  fill: var(--vscode-terminal-ansiMagenta);
-  stroke: var(--vscode-terminal-ansiMagenta);
-  background: var(--vscode-terminal-ansiMagenta);
+  --tone: var(--vscode-terminal-ansiMagenta);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
 }
 
 .tl .ac-cyan,
 .swatch.ac-cyan {
-  fill: var(--vscode-terminal-ansiCyan);
-  stroke: var(--vscode-terminal-ansiCyan);
-  background: var(--vscode-terminal-ansiCyan);
+  --tone: var(--vscode-terminal-ansiCyan);
+  fill: var(--tone);
+  stroke: var(--tone);
+  background: var(--tone);
+}
+
+/* Agent types that share a color (two blue implementers) keep it, in a lighter and a deeper shade. */
+.tl .tint-1,
+.swatch.tint-1 {
+  fill: color-mix(in srgb, var(--tone) 55%, var(--vscode-foreground));
+  stroke: color-mix(in srgb, var(--tone) 55%, var(--vscode-foreground));
+  background: color-mix(in srgb, var(--tone) 55%, var(--vscode-foreground));
+}
+
+.tl .tint-2,
+.swatch.tint-2 {
+  fill: color-mix(in srgb, var(--tone) 60%, var(--vscode-editor-background));
+  stroke: color-mix(in srgb, var(--tone) 60%, var(--vscode-editor-background));
+  background: color-mix(in srgb, var(--tone) 60%, var(--vscode-editor-background));
 }
 
 .tl .tl-bar {
@@ -1317,13 +1353,54 @@ table.grid .cell {
   stroke-dasharray: 4 3;
 }
 
+/* The process view: a report flowing back is dashed, start and end are events, a parallel team forks at a gateway. */
+.dg-edge.back {
+  stroke-dasharray: 4 3;
+}
+
+.dg-arrowhead {
+  fill: var(--vscode-descriptionForeground);
+}
+
+.dg-event {
+  fill: var(--vscode-editor-background);
+  stroke: var(--vscode-foreground);
+  stroke-width: 1.5;
+}
+
+.dg-event.end {
+  stroke-width: 3;
+}
+
+.dg-gateway {
+  fill: var(--vscode-editor-background);
+  stroke: var(--vscode-descriptionForeground);
+  stroke-width: 1;
+}
+
 .dg-empty {
   padding: 16px;
 }
 
-.tl .dg-area {
-  stroke-width: 0;
-  opacity: 0.85;
+/* Each run is its own ribbon; a hairline in the background color keeps stacked and back-to-back runs apart. */
+.tl path.dg-area {
+  stroke: var(--vscode-editorWidget-background);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  fill-opacity: 0.45;
+}
+
+/* The ridge: the top edge of a run in its agent's color, so the chart reads as an area, not as blocks. */
+.tl path.dg-ridge {
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dg-agent:hover path.dg-area,
+.dg-agent:focus-visible path.dg-area {
+  fill-opacity: 0.75;
 }
 
 .tl .dg-band {

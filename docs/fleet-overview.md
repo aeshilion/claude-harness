@@ -31,8 +31,8 @@ The Fleet overview shows every repo in one table. Use it to compare line counts,
 
 ## Open the Fleet overview
 
-- The table icon in the main window sidebar header.
-- The table icon in the activity bar title bar, and on the **Repositories** node.
+- The dashboard icon in the main window sidebar header.
+- The dashboard icon in the activity bar title bar, before Open Claude Here, and on the **Repositories** node.
 - **Claude Harness: Fleet Overview** in the command palette.
 
 ---

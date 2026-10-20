@@ -68,23 +68,37 @@ The Delegation section has six views behind one toggle bar. Each toggle shows a 
 | View | Shows |
 | --- | --- |
 | Timeline | A lane per agent, next to your prompts. A red circle with a white x marks a stopped agent. |
-| Delegation map | Who started which agent. Teams are boxed, and message counts show in the node. |
-| Decisions | What happened after each prompt: delegated, worked itself, followed up an agent, or answered. The width of each line is the number of prompts. |
-| Concurrency | The agents that ran at the same time, with the peak marked. |
+| Delegation map | Who started which agent. Its **Sum** and **Full timeline** modes are described below. |
+| Decisions | What happened after each prompt: delegated, worked itself, followed up an agent, or answered. Its **Sum** and **Full timeline** modes are described below. |
+| Concurrency | The agents that ran at the same time. Each agent run is one bar in its own lane, so the height is the number of agents running, and the peak is marked. |
 | Token flow | The tokens from the session, through the main thread and each agent type, to the outcome. |
-| Scatter | Each agent by run time and tokens. Dot size is the tool use count. Dashed lines are medians. Both scales are logarithmic. |
+| Scatter | Each agent by run time and tokens. Dot area is the agent's cost, and the costliest dots are drawn first so smaller ones stay visible. Dashed lines are medians. Both scales are logarithmic. |
 
-Lane colors come from the agent definition's own color field, or from the color a teammate was given. Other agents use a palette.
+Lane colors come from the agent definition's own color field, or from the color a teammate was given. A type without its own color takes a palette hue that no named type uses, for as long as one is left. Types that share a hue get a lighter and a deeper shade of it.
 
 ### Delegation map
 
-The map shows who started each agent. Use it to follow a chain of agents back to the main thread.
+The map shows who started each agent. Use it to follow a chain of agents back to the main thread. Two buttons above the diagram switch its mode. Each button shows a short hover.
+
+| Mode | Shows |
+| --- | --- |
+| Sum | Agents summed up by type under whoever started them. Click a type to drill down to its runs. |
+| Full timeline | Your prompts as a process from top to bottom. Each delegation branches into the agents it started, and their reports join the main thread again. A team that ran together forks at a parallel gateway beside its prompt. |
+
+The Full timeline opens by default. Every row, a type or a run, shows the same four facts in fixed right-aligned columns: the model (the runs for a type), the run time, the tool uses and the messages. A value of zero or `-` still shows.
 
 ![Delegation map view](images/session-map.png)
 
 ### Decisions
 
-The Decisions view shows what the main thread did after each of your prompts.
+The Decisions view shows what the main thread did after each of your prompts. Two buttons above the diagram switch its mode. Each button shows a short hover.
+
+| Mode | Shows |
+| --- | --- |
+| Sum | Your prompts summed up by what the main thread did, which agent or team it used, and how that ended. This is the default. |
+| Full timeline | Every prompt in order, with what the main thread did, the agent it launched or its team, and each team member. |
+
+Click a node with a `▸` to open it and see what is below it. Click a node with a `▾` to fold it again. The Sum mode opens its first three levels, and the Full timeline opens every level.
 
 ![Decisions view](images/session-decisions.png)
 
