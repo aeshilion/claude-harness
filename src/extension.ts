@@ -51,7 +51,8 @@ import {
   validateName,
 } from './harness';
 import { HarnessPanel, PanelHost } from './panel';
-import { findSession, listSessions, readSession } from './sessions';
+import { findSession, importTranscript, listSessions, readSession } from './sessions';
+import { STYLE_MODELS, StyleModel, draftStyle, stylePrompt, writeStyleDraft } from './style';
 import { pickTools, splitTools, TOOL_FIELDS } from './tools';
 import { HarnessTree, Node } from './tree';
 
@@ -263,6 +264,67 @@ export function activate(context: vscode.ExtensionContext): void {
         if (typeof color === 'string') agentColors[type] = color.trim().toLowerCase();
       }
       return { ...detail, repo: view!.label, agentColors };
+    },
+    draftStyle: async (id, sessionId, model, started) => {
+      const scope = scopes.find(s => s.id === id && s.id !== global.id);
+      const summary = scope ? findSession(scope.base, global.root, sessionId) : undefined;
+      if (!scope || !summary) return { state: 'error', error: 'The session transcript is gone.' };
+      if (!STYLE_MODELS.includes(model as StyleModel)) return { state: 'error', error: `Unknown model ${model}.` };
+      const scan = (await readSession(summary)).style;
+      const choice = await vscode.window.showWarningMessage(
+        `Draft an output style with Claude ${model}?`,
+        {
+          modal: true,
+          detail: `This runs claude -p on your own Claude login, so it counts against your plan. It sends the scan of this session: ${scan.corrections.length} ${scan.corrections.length === 1 ? 'correction' : 'corrections'} you made, the interrupts and the length and format of the replies. No code and no whole replies. The draft is saved to ${path.join(scope.root, 'output-styles')}.`,
+        },
+        'Draft'
+      );
+      if (choice !== 'Draft') return { state: 'idle' };
+      started();
+      const result = await draftStyle(stylePrompt(scan), model as StyleModel, os.tmpdir());
+      if ('error' in result) return { state: 'error', error: result.error };
+      let file = '';
+      try {
+        file = writeStyleDraft(scope.root, result.text, scan.active);
+      } catch (e) {
+        return { state: 'error', error: (e as Error).message };
+      }
+      refresh();
+      showFile(file);
+      return { state: 'done', file, cost: result.cost };
+    },
+    exportSession: async (id, sessionId) => {
+      const scope = scopes.find(s => s.id === id && s.id !== global.id);
+      const summary = scope ? findSession(scope.base, global.root, sessionId) : undefined;
+      if (!summary) return void vscode.window.showErrorMessage('The session transcript is gone.');
+      const downloads = path.join(os.homedir(), 'Downloads');
+      const target = await vscode.window.showSaveDialog({
+        title: 'Export the session transcript',
+        saveLabel: 'Export',
+        defaultUri: vscode.Uri.file(path.join(fs.existsSync(downloads) ? downloads : os.homedir(), path.basename(summary.file))),
+        filters: { 'Claude Code transcript': ['jsonl'] },
+      });
+      if (!target) return;
+      try {
+        fs.copyFileSync(summary.file, target.fsPath);
+      } catch (e) {
+        return void vscode.window.showErrorMessage(`Could not export the transcript: ${(e as Error).message}`);
+      }
+      void vscode.window.showInformationMessage(`Exported the session transcript to ${target.fsPath}.`);
+    },
+    importSession: async id => {
+      const scope = scopes.find(s => s.id === id && s.id !== global.id);
+      if (!scope) return undefined;
+      const picked = await vscode.window.showOpenDialog({ title: `Import a session transcript into ${scope.label}`, openLabel: 'Import', canSelectMany: false, filters: { 'Claude Code transcript': ['jsonl'] } });
+      if (!picked?.[0]) return undefined;
+      try {
+        const { id: sessionId, existed } = importTranscript(picked[0].fsPath, scope.base, global.root);
+        void vscode.window.showInformationMessage(existed ? `${scope.label} already has this session.` : `Imported the session into ${scope.label}. Resume it there with claude --resume ${sessionId}.`);
+        return sessionId;
+      } catch (e) {
+        void vscode.window.showErrorMessage(`Could not import the transcript: ${(e as Error).message}`);
+        return undefined;
+      }
     },
   };
 

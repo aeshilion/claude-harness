@@ -126,6 +126,19 @@ export interface SessionFinding {
   agent?: string;
 }
 
+export type StyleSignal = 'length' | 'format' | 'language' | 'repetition' | 'asking';
+
+/** What the transcript says about how replies should read: the evidence for an output style. */
+export interface StyleScan {
+  /** Output styles that were active, in order of first appearance. */
+  active: string[];
+  prompts: number;
+  interrupts: number;
+  /** The main thread's last reply before each prompt; the counts are replies that use the format. */
+  replies: { count: number; medianWords: number; longest: number; headings: number; tables: number; lists: number };
+  corrections: { at: number; kind: StyleSignal; text: string }[];
+}
+
 export interface SessionDetail {
   id: string;
   file: string;
@@ -148,6 +161,7 @@ export interface SessionDetail {
   decisions: SessionDecision[];
   children: SessionSummary[];
   findings: SessionFinding[];
+  style: StyleScan;
 }
 
 type Rec = Record<string, any>;
@@ -192,6 +206,56 @@ export function promptText(content: unknown): string | undefined {
 }
 
 const isPrompt = (o: Rec) => o.type === 'user' && !o.isSidechain && !o.isMeta && !o.toolUseResult && o.origin?.kind !== 'task-notification';
+
+const STYLE_SIGNALS: [StyleSignal, RegExp][] = [
+  ['length', /\b(too long|shorter|shorten|more concise|be concise|be brief|too verbose|less text|too much text|tl;?dr|kürzer|zu lang)\b/i],
+  ['format', /\b(no tables?|without (a )?tables?|as a table|in a table|no bullets?|no bullet points|no headings?|no headers|no markdown|plain text|keine tabellen?)\b/i],
+  ['language', /\b(in german|auf deutsch|in english|auf englisch)\b/i],
+  ['repetition', /\b(don'?t repeat|stop repeating|no summary|no recap|just the answer|only the answer)\b/i],
+  ['asking', /\b(don'?t ask|stop asking|just do it)\b/i],
+];
+
+function scanStyle(main: Rec[], prompts: { at: number; text: string }[]): StyleScan {
+  const active: string[] = [];
+  const replies: string[] = [];
+  let interrupts = 0;
+  let reply = '';
+  let replyId: unknown;
+  for (const o of main) {
+    if (o.type === 'attachment' && o.attachment?.type === 'output_style' && typeof o.attachment.style === 'string' && !active.includes(o.attachment.style)) active.push(o.attachment.style);
+    if (o.type === 'user' && /^\[Request interrupted by user/.test(textOf(o.message?.content).trim())) interrupts++;
+    if (isPrompt(o) && promptText(o.message?.content)) {
+      if (reply.trim()) replies.push(reply);
+      reply = '';
+      replyId = undefined;
+    }
+    if (o.type !== 'assistant' || !Array.isArray(o.message?.content)) continue;
+    const text = o.message.content.filter((b: Rec) => b.type === 'text' && b.text).map((b: Rec) => b.text).join('\n');
+    if (!text.trim()) continue;
+    reply = o.message.id && o.message.id === replyId ? `${reply}\n${text}` : text;
+    replyId = o.message.id;
+  }
+  if (reply.trim()) replies.push(reply);
+  const words = replies.map(r => r.split(/\s+/).filter(Boolean).length).sort((a, b) => a - b);
+  const using = (re: RegExp) => replies.filter(r => re.test(r)).length;
+  return {
+    active,
+    prompts: prompts.length,
+    interrupts,
+    replies: {
+      count: replies.length,
+      medianWords: words.length ? words[Math.floor(words.length / 2)] : 0,
+      longest: words.length ? words[words.length - 1] : 0,
+      headings: using(/^#{1,6}\s/m),
+      tables: using(/^\s*\|.*\|\s*$\n^\s*\|?\s*:?-{3,}/m),
+      lists: using(/^\s*([-*+]|\d+\.)\s/m),
+    },
+    corrections: prompts.flatMap(p => {
+      const kind = STYLE_SIGNALS.find(([, re]) => re.test(p.text))?.[0];
+      return kind ? [{ at: p.at, kind, text: p.text.slice(0, 240) }] : [];
+    }),
+  };
+}
 
 function readHead(file: string, bytes: number, size: number): Rec[] {
   const fd = fs.openSync(file, 'r');
@@ -321,6 +385,22 @@ export function listSessions(dir: string, root: string): SessionSummary[] {
 }
 
 /** Finds a session of the repo, or a headless child of one, by id. */
+/**
+ * Copies an exported transcript into the repo's Claude project folder, where `claude --resume <id>` finds it.
+ * The id comes from the records, not the file name, and an existing session file is never replaced.
+ */
+export function importTranscript(file: string, dir: string, root: string): { id: string; existed: boolean } {
+  const records = fs.readFileSync(file, 'utf8').split('\n').flatMap(parseLine);
+  const id = records.find(o => typeof o.sessionId === 'string' && UUID.test(o.sessionId))?.sessionId as string | undefined;
+  if (!id || !records.some(o => o.type === 'user' || o.type === 'assistant')) throw new Error('This file is not a Claude Code transcript.');
+  const folder = path.join(root, 'projects', projectSlug(dir));
+  const target = path.join(folder, `${id}.jsonl`);
+  if (fs.existsSync(target)) return { id, existed: true };
+  fs.mkdirSync(folder, { recursive: true });
+  fs.copyFileSync(file, target);
+  return { id, existed: false };
+}
+
 export function findSession(dir: string, root: string, id: string): SessionSummary | undefined {
   for (const s of listSessions(dir, root)) {
     if (s.id === id) return s;
@@ -707,6 +787,7 @@ export async function readSession(summary: SessionSummary): Promise<SessionDetai
     decisions,
     children: summary.children,
     findings,
+    style: scanStyle(main, prompts),
   };
   details.set(file, { mtime: newest, size: stat.size, detail });
   return detail;

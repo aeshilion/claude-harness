@@ -24,8 +24,10 @@
     allSessions: new Set(),
     session: undefined,
     sessionView: saved.sessionView || 'timeline',
-    decisionMode: saved.decisionMode || 'sum',
+    decisionMode: saved.decisionView || 'timeline',
     mapMode: saved.mapMode || 'timeline',
+    billing: saved.billing || 'api',
+    styleModel: saved.styleModel || 'sonnet',
   };
   const app = document.getElementById('app');
 
@@ -46,7 +48,7 @@
   const logo = size => (document.body.dataset.logo ? el('img', { className: `logo ${size}`, src: document.body.dataset.logo, alt: '' }) : icon('hubot'));
   const iconBtn = (name, title, onclick, disabled) => el('button', { className: 'icon-btn', title, 'aria-label': title, onclick, disabled }, icon(name));
 
-  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], mcpSort: state.mcpSort, repoSort: state.repoSort, sessionView: state.sessionView, decisionMode: state.decisionMode, mapMode: state.mapMode });
+  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], mcpSort: state.mcpSort, repoSort: state.repoSort, sessionView: state.sessionView, decisionView: state.decisionMode, mapMode: state.mapMode, billing: state.billing, styleModel: state.styleModel });
   const SOURCES = {
     user: { icon: 'account', label: 'Your config (~/.claude.json)' },
     local: { icon: 'lock', label: 'Local to this repo (~/.claude.json)' },
@@ -238,6 +240,10 @@
         { className: `section-head nested${current ? ' selected' : ''}`, title: 'Search and filter the sessions', onclick: () => showSessionsPage(view.id) },
         el('span', { className: 'twistie', onclick: toggle, title: collapsed ? 'Expand' : 'Collapse' }, icon(collapsed ? 'chevron-right' : 'chevron-down')),
         el('span', { className: 'label' }, 'Sessions'),
+        iconBtn('desktop-download', 'Import a session transcript', e => {
+          e.stopPropagation();
+          vscode.postMessage({ type: 'importSession', scope: view.id });
+        }),
         iconBtn('search', 'Search sessions', e => {
           e.stopPropagation();
           showSessionsPage(view.id);
@@ -1651,6 +1657,61 @@
   const refreshCard = key => {
     if (hover && hover.dataset.key === key && hover.classList.contains('show') && hover.build) hover.replaceChildren(hover.build());
   };
+
+  // Every `title` tooltip in the house hover style. On the first hover the title moves to `data-tip`, so the
+  // browser's own tooltip never shows; the card opens after the repo card's pause, and at once on focus.
+  let tipTimer;
+  let tipTarget;
+  const tipCard = (text, glyph) => {
+    const [first, ...rest] = text.split('\n');
+    return el(
+      'div',
+      { className: 'hc hc-tip' },
+      el('div', { className: 'hc-head' }, glyph ? icon(glyph) : null, el('span', { className: 'hc-type' }, first)),
+      rest.length ? el('div', { className: 'hc-text tip-lines' }, rest.join('\n')) : null
+    );
+  };
+  const tipHost = node => (node instanceof Element ? node.closest('[title], [data-tip]') : null);
+  const showTip = (t, delay) => {
+    if (t.hasAttribute('title')) {
+      const title = t.getAttribute('title');
+      t.removeAttribute('title');
+      if (title) {
+        t.dataset.tip = title;
+        if (!t.hasAttribute('aria-label') && !t.hasAttribute('aria-description')) t.setAttribute('aria-description', title);
+      }
+    }
+    clearTimeout(tipTimer);
+    tipTarget = t;
+    const text = t.dataset.tip;
+    if (!text) return;
+    const own = t.querySelector(':scope > .codicon');
+    const glyph = own && [...own.classList].find(c => c.startsWith('codicon-') && !c.startsWith('codicon-modifier'));
+    tipTimer = setTimeout(() => {
+      if (tipTarget !== t || !t.isConnected) return;
+      const r = t.getBoundingClientRect();
+      placeCard(`tip:${text}`, () => tipCard(text, glyph && glyph.slice('codicon-'.length)), { x: r.left - 14, y: r.bottom - 6 });
+    }, delay);
+  };
+  const hideTip = () => {
+    clearTimeout(tipTimer);
+    tipTarget = undefined;
+    if (hover && (hover.dataset.key || '').startsWith('tip:')) hideHover();
+  };
+  document.addEventListener('mouseover', e => {
+    const t = tipHost(e.target);
+    if (t && t !== tipTarget) showTip(t, 350);
+  });
+  document.addEventListener('mouseout', e => {
+    const t = tipHost(e.target);
+    if (t && t === tipTarget && !t.contains(e.relatedTarget)) hideTip();
+  });
+  document.addEventListener('focusin', e => {
+    const t = tipHost(e.target);
+    if (t) showTip(t, 0);
+  });
+  document.addEventListener('focusout', hideTip);
+  document.addEventListener('mousedown', hideTip);
   const ago = t => {
     const m = Math.round((Date.now() - t) / 60000);
     return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : fmtDate(t);
@@ -2824,7 +2885,7 @@
     const fact = text => el('span', { className: 'legend-item muted' }, text);
     const main = el('span', { className: 'legend-item' }, el('span', { className: 'swatch tone-main' }), 'main thread');
     const parts = {
-      timeline: [...types, fact('● prompt'), fact('○ result'), fact('▼ message'), el('span', { className: 'legend-item' }, el('span', { className: 'stop-glyph', 'aria-hidden': 'true' }, '×'), 'stopped')],
+      timeline: [...types, el('span', { className: 'legend-break' }), fact('● prompt'), fact('○ result'), fact('▼ message'), el('span', { className: 'legend-item' }, el('span', { className: 'stop-glyph', 'aria-hidden': 'true' }, '×'), 'stopped')],
       map: [main, ...types],
       decisions: [fact('one prompt = the time until the next prompt'), fact('line width: prompts'), fact('gold: delegated'), fact('▸ click to drill down, ▾ to collapse')],
       concurrency: [...types, fact('height: agents running'), fact('one bar per agent run'), fact('ticks: prompts')],
@@ -2900,36 +2961,50 @@
   };
 
   const fmtUsd = v => (v <= 0 ? '$0' : v < 0.01 ? '<$0.01' : v < 1000 ? `$${v.toFixed(2)}` : `$${Math.round(v).toLocaleString()}`);
+  const fmtShare = (v, grant) => {
+    const p = (v / grant) * 100;
+    return p <= 0 ? '0%' : p < 0.01 ? '<0.01%' : `${p < 10 ? p.toFixed(2) : p < 100 ? p.toFixed(1) : Math.round(p)}%`;
+  };
   const COST_KINDS = [
     ['cacheRead', 'Cache reads'],
     ['cacheWrite', 'Cache writes'],
     ['output', 'Output'],
     ['input', 'Input'],
   ];
+  // Weekly limits valued at API list prices. Anthropic publishes none: Max 5x from botfarm.run (March 2026),
+  // Max 20x and Team Premium from wokey.ai (accounts measured 2026-10-12 to 2026-10-19). API billing has no grant.
+  const BILLING = [
+    ['max5', 'Max 5x', 'dashboard', 523],
+    ['max20', 'Max 20x', 'rocket', 1643],
+    ['team', 'Team Premium', 'organization', 861],
+    ['api', 'API billing', 'credit-card', 0],
+  ];
+  const billingAbout = (label, grant) => (grant ? `This session as a share of one ${label} weekly limit, which measures at about $${grant.toLocaleString()} of API list prices.` : 'This session at Anthropic API list prices.');
 
-  function costBar(parts, total, label) {
-    const bar = el('div', { className: 'cost-bar', role: 'img', 'aria-label': `${label}: ${parts.map(p => `${p.label} ${fmtUsd(p.cost)}`).join(', ')}` });
+  function costBar(parts, total, label, fmt) {
+    const bar = el('div', { className: 'cost-bar', role: 'img', 'aria-label': `${label}: ${parts.map(p => `${p.label} ${fmt(p.cost)}`).join(', ')}` });
     for (const p of parts) {
       if (p.cost <= 0) continue;
-      const seg = el('span', { className: `swatch cost-seg ${p.tone}`, title: `${p.label}: ${fmtUsd(p.cost)} (${Math.round((p.cost / total) * 100)}%)` });
+      const seg = el('span', { className: `swatch cost-seg ${p.tone}`, title: `${p.label}: ${fmt(p.cost)} (${Math.round((p.cost / total) * 100)}%)` });
       seg.style.width = `${(p.cost / total) * 100}%`;
       bar.append(seg);
     }
     return bar;
   }
 
-  const costLegend = (parts, total) =>
+  const costLegend = (parts, total, fmt) =>
     el(
       'div',
       { className: 'cost-legend' },
       parts
         .filter(p => p.cost > 0)
         .map(p =>
-          el('span', { className: 'cost-item' }, el('span', { className: `swatch ${p.tone}` }), el('span', { className: 'cost-name' }, p.label), el('b', {}, fmtUsd(p.cost)), el('span', { className: 'cost-pct' }, `${Math.round((p.cost / total) * 100)}%`))
+          el('span', { className: 'cost-item' }, el('span', { className: `swatch ${p.tone}` }), el('span', { className: 'cost-name' }, p.label), el('b', {}, fmt(p.cost)), el('span', { className: 'cost-pct' }, `${Math.round((p.cost / total) * 100)}%`))
         )
     );
 
   // Cost row: the session total, split by who spent it and by what it was spent on.
+  // A subscription plan shows every amount as a share of that plan's weekly limit, API billing in dollars.
   function renderCost(d, colors) {
     const byType = new Map();
     for (const a of d.agents) byType.set(a.type, (byType.get(a.type) || 0) + (a.usage.cost || 0));
@@ -2940,21 +3015,103 @@
       tone: `kind-${key}`,
       cost: [d.usage, ...d.agents.map(a => a.usage)].reduce((n, u) => n + ((u.costParts || {})[key] || 0), 0),
     }));
-    return el(
+    const [, planLabel, , grant] = BILLING.find(b => b[0] === state.billing) || BILLING[BILLING.length - 1];
+    const fmt = grant ? v => fmtShare(v, grant) : fmtUsd;
+    const plans = modeSwitch(
+      app,
+      BILLING.map(([id, label, glyph, g]) => [id, label, glyph, billingAbout(label, g)]),
+      state.billing,
+      'Billing',
+      id => {
+        state.billing = id;
+        card.replaceWith(renderCost(d, colors));
+      }
+    );
+    const card = el(
       'div',
       { className: 'cost-card' },
       el(
         'div',
         { className: 'cost-head' },
-        el('div', {}, el('div', { className: 'cost-k' }, 'Estimated cost'), el('div', { className: 'cost-v' }, fmtUsd(total))),
-        el('div', { className: 'cost-basis' }, 'At Anthropic API list prices for the tokens in this session and its agents. A Claude subscription bills differently.')
+        el('div', {}, el('div', { className: 'cost-k' }, grant ? 'Weekly limit used' : 'Estimated cost'), el('div', { className: 'cost-v' }, fmt(total), grant ? '*' : '')),
+        plans,
+        el(
+          'div',
+          { className: 'cost-basis' },
+          grant
+            ? [billingAbout(planLabel, grant), el('div', {}, '* Not exact prices: Anthropic publishes no figure for a weekly limit, so this is an estimate.')]
+            : 'At Anthropic API list prices for the tokens in this session and its agents. A Claude subscription bills differently.'
+        )
       ),
       total > 0
         ? [
-            el('div', { className: 'cost-row' }, el('div', { className: 'cost-label' }, 'Who spent it'), costBar(spenders, total, 'Cost by thread'), costLegend(spenders, total)),
-            el('div', { className: 'cost-row' }, el('div', { className: 'cost-label' }, 'Spent on'), costBar(kindTotals, total, 'Cost by token kind'), costLegend(kindTotals, total)),
+            el('div', { className: 'cost-row' }, el('div', { className: 'cost-label' }, 'Who spent it'), costBar(spenders, total, 'Cost by thread', fmt), costLegend(spenders, total, fmt)),
+            el('div', { className: 'cost-row' }, el('div', { className: 'cost-label' }, 'Spent on'), costBar(kindTotals, total, 'Cost by token kind', fmt), costLegend(kindTotals, total, fmt)),
           ]
         : el('div', { className: 'empty flush' }, 'No priced model usage in this session.')
+    );
+    return card;
+  }
+
+  const STYLE_MODELS = [
+    ['sonnet', 'Sonnet'],
+    ['opus', 'Opus'],
+    ['haiku', 'Haiku'],
+  ];
+  const STYLE_KINDS = { length: 'Length', format: 'Format', language: 'Language', repetition: 'Repetition', asking: 'Asking' };
+
+  // Output style: what the transcript says about how replies should read, and Claude drafting a style from it.
+  function renderStyle(d) {
+    const s = state.session;
+    const scan = d.style;
+    if (!scan) return null;
+    const r = scan.replies;
+    const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const draft = s.styleDraft || { state: 'idle' };
+    const running = draft.state === 'running';
+    const facts = [
+      `Active: ${scan.active.length ? scan.active.join(', ') : 'default'}`,
+      count(scan.prompts, 'prompt', 'prompts'),
+      count(scan.corrections.length, 'correction', 'corrections'),
+      count(scan.interrupts, 'interrupt', 'interrupts'),
+      `${count(r.count, 'reply', 'replies')}: median ${r.medianWords} words, longest ${r.longest}`,
+      `${r.headings} with headings, ${r.tables} with tables, ${r.lists} with lists`,
+    ];
+    return el(
+      'div',
+      { className: 'recent' },
+      el('div', { className: 'group-label' }, 'Output style'),
+      el('div', { className: 'legend' }, facts.map(t => el('span', { className: 'legend-item muted' }, t))),
+      scan.corrections.length
+        ? scan.corrections.map(c => el('div', { className: 'row style-row' }, el('span', { className: 'style-kind' }, STYLE_KINDS[c.kind] || c.kind), el('span', { className: 'name wrap' }, c.text)))
+        : el('div', { className: 'empty flush' }, 'No corrections about length, format, language or repetition in this session.'),
+      el(
+        'div',
+        { className: 'style-draft' },
+        el(
+          'select',
+          {
+            'aria-label': 'Model',
+            disabled: running,
+            onchange: e => {
+              state.styleModel = e.target.value;
+              persist();
+            },
+          },
+          STYLE_MODELS.map(([id, label]) => el('option', { value: id, selected: state.styleModel === id }, label))
+        ),
+        el(
+          'button',
+          { className: 'primary', disabled: running, onclick: () => vscode.postMessage({ type: 'draftStyle', scope: s.scope, id: s.id, model: state.styleModel }) },
+          running ? el('span', { className: 'codicon codicon-loading codicon-modifier-spin' }) : icon('sparkle'),
+          running ? 'Drafting...' : 'Draft output style'
+        ),
+        draft.state === 'done'
+          ? el('button', { className: 'link', onclick: () => openAt(draft.file) }, `Drafted ${draft.file.split(/[\\/]/).pop()}`)
+          : draft.state === 'error'
+            ? el('span', { className: 'style-error' }, draft.error)
+            : null
+      )
     );
   }
 
@@ -2995,7 +3152,8 @@
     });
     observer.observe(timeline);
     state.timelineObserver = observer;
-    const head = pageHead('type-hierarchy-sub', clip(d.title, 140), sub, back, reload);
+    const exportBtn = iconBtn('export', 'Export the transcript as JSONL', () => vscode.postMessage({ type: 'exportSession', scope: s.scope, id: s.id }));
+    const head = pageHead('type-hierarchy-sub', clip(d.title, 140), sub, back, exportBtn, reload);
     head.classList.add('session-head');
     head.querySelector('h1').setAttribute('title', d.title);
     return el(
@@ -3037,6 +3195,7 @@
               )
             )
           : null,
+        renderStyle(d),
         d.children.length
           ? el(
               'div',
@@ -3126,6 +3285,11 @@
     } else if (m.type === 'session') {
       if (state.session && state.session.scope === m.scope && state.session.id === m.id) {
         state.session.data = m.data;
+        if (state.page === 'session' && !state.detail) renderMain();
+      }
+    } else if (m.type === 'styleDraft') {
+      if (state.session && state.session.scope === m.scope && state.session.id === m.id) {
+        state.session.styleDraft = m;
         if (state.page === 'session' && !state.detail) renderMain();
       }
     } else if (m.type === 'effective') {

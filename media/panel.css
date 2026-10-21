@@ -826,6 +826,43 @@ table.grid .cell {
   color: var(--vscode-descriptionForeground);
 }
 
+.legend-break {
+  flex-basis: 100%;
+  height: 0;
+}
+
+.row.style-row {
+  grid-template-columns: 76px 1fr;
+  column-gap: 10px;
+  align-items: start;
+  cursor: default;
+}
+
+.style-kind {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 11px;
+  text-align: center;
+}
+
+.style-draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.style-draft select {
+  width: auto;
+}
+
+.style-error {
+  color: var(--vscode-errorForeground);
+}
+
 .swatch {
   width: 12px;
   height: 10px;
@@ -1194,6 +1231,15 @@ table.grid .cell {
   width: auto;
 }
 
+.hc-tip .hc-type {
+  overflow-wrap: anywhere;
+}
+
+.hc-text.tip-lines {
+  white-space: pre-line;
+  color: var(--vscode-descriptionForeground);
+}
+
 .dg-node {
   fill: var(--vscode-editor-background);
   stroke: var(--vscode-panel-border);
@@ -1479,6 +1525,12 @@ table.grid .cell {
   font-weight: 300;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
+}
+
+.cost-head .dg-modes {
+  flex-wrap: wrap;
+  align-self: center;
+  margin: 0;
 }
 
 .cost-basis {

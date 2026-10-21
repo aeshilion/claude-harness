@@ -46,6 +46,9 @@ type Message =
   | { type: 'initRun'; dir: string; form: ScaffoldForm; apply: boolean }
   | { type: 'sessions'; scope: string }
   | { type: 'session'; scope: string; id: string }
+  | { type: 'draftStyle'; scope: string; id: string; model: string }
+  | { type: 'exportSession'; scope: string; id: string }
+  | { type: 'importSession'; scope: string }
   | { type: 'openAt'; file: string; line?: number };
 
 export interface PanelHost {
@@ -63,6 +66,11 @@ export interface PanelHost {
   initRun?(dir: string, form: ScaffoldForm, apply: boolean): Promise<unknown>;
   sessions?(scopeId: string): unknown;
   session?(scopeId: string, id: string): Promise<unknown>;
+  /** Asks first, then drafts an output style from the session's style scan; `started` fires once the user agreed. */
+  draftStyle?(scopeId: string, id: string, model: string, started: () => void): Promise<{ state: 'idle' } | { state: 'done'; file: string; cost?: number } | { state: 'error'; error: string }>;
+  exportSession?(scopeId: string, id: string): Promise<void>;
+  /** Picks a transcript and copies it into the repo; returns the session id, or nothing when cancelled or failed. */
+  importSession?(scopeId: string): Promise<string | undefined>;
 }
 
 export type Page = { page?: string; repo?: string; dir?: string; session?: string };
@@ -294,6 +302,25 @@ export class HarnessPanel {
           data = { error: (e as Error).message };
         }
         this.post({ type: 'session', scope: m.scope, id: m.id, data: data ?? { error: 'The session transcript is gone.' } });
+        return;
+      }
+      case 'draftStyle': {
+        const reply = (data: object) => this.post({ type: 'styleDraft', scope: m.scope, id: m.id, ...data });
+        try {
+          reply((await this.host.draftStyle?.(m.scope, m.id, m.model, () => reply({ state: 'running', model: m.model }))) ?? { state: 'idle' });
+        } catch (e) {
+          reply({ state: 'error', error: (e as Error).message });
+        }
+        return;
+      }
+      case 'exportSession':
+        await this.host.exportSession?.(m.scope, m.id);
+        return;
+      case 'importSession': {
+        const id = await this.host.importSession?.(m.scope);
+        if (!id) return;
+        this.post({ type: 'sessions', scope: m.scope, list: this.host.sessions?.(m.scope) ?? [] });
+        this.post({ type: 'page', page: 'session', repo: m.scope, session: id });
         return;
       }
       case 'openAt': {
