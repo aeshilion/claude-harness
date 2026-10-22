@@ -3005,16 +3005,17 @@
     ['input', 'Input'],
   ];
   // Weekly limits valued at API list prices. Anthropic publishes none: Max 5x from botfarm.run (March 2026),
-  // Max 20x and Team Premium from wokey.ai (accounts measured 2026-10-12 to 2026-10-19). API billing has no grant.
-  // Two figures are derived, not measured: Pro is one fifth of Max 5x (about 105) and Team Standard one fifth of
-  // Team Premium (about 172), because claude.com/pricing sells Max 5x at 5 times Pro and Premium at 5 times Standard.
+  // Max 20x from wokey.ai (accounts measured 2026-10-12 to 2026-10-19). API billing has no grant.
+  // Team Premium (1010) was measured against the Claude app's usage card on one Team Premium seat, 2026-10-22
+  // (56 % used at 566 $ of list prices): one sample, still an estimate. Two figures are derived: Pro is one fifth of
+  // Max 5x (about 105) and Team Standard one fifth of Team Premium (about 202), because claude.com/pricing sells Max 5x at 5 times Pro and Premium at 5 times Standard.
   // The ids and figures match PLANS in src/sessions.ts, which a unit test compares. Keep `api` last.
   const BILLING = [
     ['pro', 'Pro', 'account', 105],
     ['max5', 'Max 5x', 'dashboard', 523],
     ['max20', 'Max 20x', 'rocket', 1643],
-    ['team-standard', 'Team Standard', 'organization', 172],
-    ['team', 'Team Premium', 'organization', 861],
+    ['team-standard', 'Team Standard', 'organization', 202],
+    ['team', 'Team Premium', 'organization', 1010],
     ['api', 'API billing', 'credit-card', 0],
   ];
   const TEAM_PLANS = new Set(['team', 'team-standard']);

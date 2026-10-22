@@ -2,6 +2,12 @@
 
 All notable changes to Claude Harness are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions with no version change in the package.json history (0.1.3, 0.1.5 to 0.1.18, 0.1.20 to 0.1.24, 0.1.27, 0.2.1 and 0.2.3 to 0.2.11) have no entry.
 
+## [0.2.25] - 2026-10-22
+
+### Changed
+
+- The Team Premium weekly limit is 1010 $ at API list prices, up from 861 $, and Team Standard 202 $. Measured against the Claude app's usage card on one Team Premium seat, 2026-10-22; one sample, still an estimate. See [Sessions](docs/sessions.md#session-page).
+
 ## [0.2.24] - 2026-10-22
 
 ### Added

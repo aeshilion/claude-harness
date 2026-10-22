@@ -57,7 +57,7 @@ The top of the sessions page sums what each account used in the last 7 days, ove
 
 The header shows the repo, the start and end, the duration, the branch and the model. Below it, the cost row shows an estimated cost at Anthropic API list prices. A Claude subscription bills differently. Two bars split the cost by **Who spent it** (the main thread and each agent type) and by **Spent on** (cache reads, cache writes, output and input).
 
-The **Billing** switch in the cost row shows the same cost as a share of one weekly limit of your plan: Pro, Max 5x, Max 20x, Team Standard, Team Premium, or API billing for dollars. Anthropic publishes no figure for a weekly limit, so the limits are estimates, marked with `*`. Max 5x, Max 20x and Team Premium come from third-party measurements. Pro and Team Standard are derived as one fifth of Max 5x and of Team Premium, following the plan prices. Team plans expose no rate limits to Claude Code's status line, so the share cannot be read from there.
+The **Billing** switch in the cost row shows the same cost as a share of one weekly limit of your plan: Pro, Max 5x, Max 20x, Team Standard, Team Premium, or API billing for dollars. Anthropic publishes no figure for a weekly limit, so the limits are estimates, marked with `*`. Max 5x and Max 20x come from third-party measurements. Team Premium (about $1,010 a week) was measured against the Claude app's usage card on one Team Premium seat on 2026-10-22: one sample, still an estimate. Pro and Team Standard are derived as one fifth of Max 5x and of Team Premium, following the plan prices. Team plans expose no rate limits to Claude Code's status line, so the share cannot be read from there.
 Four KPIs follow the cost row:
 
 | KPI | Shows |

@@ -36,15 +36,17 @@ const PRICES: [RegExp, { input: number; output: number; cacheRead: number }][] =
 
 /**
  * Weekly limit of each plan, valued in USD at API list prices. Anthropic publishes none: these are third-party
- * estimates (Max 5x, Max 20x, Team Premium) and two derived ones (Pro is Max 5x / 5, Team Standard is Team Premium / 5).
+ * estimates (Max 5x, Max 20x) and one measured against the Claude app's usage card on one Team Premium seat, 2026-10-22
+ * (56 % used = 566 $ at list prices, so about 1010 $; one sample, still an estimate). Two are derived: Pro is Max 5x / 5,
+ * Team Standard is Team Premium / 5.
  * Same ids and figures as BILLING in media/panel.js. `api` has no limit.
  */
 export const PLANS: { id: string; label: string; limit: number }[] = [
   { id: 'pro', label: 'Pro', limit: 105 },
   { id: 'max5', label: 'Max 5x', limit: 523 },
   { id: 'max20', label: 'Max 20x', limit: 1643 },
-  { id: 'team-standard', label: 'Team Standard', limit: 172 },
-  { id: 'team', label: 'Team Premium', limit: 861 },
+  { id: 'team-standard', label: 'Team Standard', limit: 202 },
+  { id: 'team', label: 'Team Premium', limit: 1010 },
   { id: 'api', label: 'API billing', limit: 0 },
 ];
 
