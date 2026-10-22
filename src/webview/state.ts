@@ -48,6 +48,8 @@ export interface State {
   repoTab: string;
   /** Detail pages open in view mode; edit shows the form. A dirty draft renders in view mode as its preview. */
   detailMode: 'view' | 'edit';
+  /** The tab each kind of element last showed in view mode, by kind. */
+  detailTabs: Record<string, string>;
   /** Elements opened by following a reference, newest last, for the detail page's back button. */
   history: string[];
   fleetTimer?: ReturnType<typeof setTimeout>;

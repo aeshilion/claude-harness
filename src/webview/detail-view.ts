@@ -1,21 +1,56 @@
 // View mode of the detail page: one harness element as a small dashboard in the session page's card language.
-// A summary card (what it is, where it comes from, what it says, its frontmatter as chips), KPI tiles on what it
-// costs in context, the body rendered as a document, and side cards for tools, files and references.
+// A summary card (what it is, where it comes from, what it says, its frontmatter as chips) and KPI tiles on what it
+// costs in context sit on top; below them one view at a time behind tabs: the document, tools, links, files.
 import type { Asset, ScopeView } from '../harness';
 import type { Detail } from '../shared/messages';
 import { AGENT_COLORS, command, kindLabel, labelOf, metaOf, openAt, persist, pluginOf, skillPluginOf, sourceName, state, viewOf, vscode } from './core';
 import { renderRuleInfo } from './detail';
 import { el, icon, plural } from './dom';
+import { hideHover } from './hover';
 import { mcpStatusWord } from './kind-page';
 import { renderMain } from './main';
 import { renderMarkdown } from './markdown';
 import type { MdHeading } from './markdown';
 import { fmtTokens, mentionedBy, mentionsOf, originText, refChip, refRow, resolve, resolveSpan, splitDescription, tokens } from './refs';
 import type { Entry } from './refs';
+import { tabBar } from './repo-page';
 import type { Draft } from './state';
 import { groupHead } from './tables';
 
 type Child = Node | string | null | undefined | false | Child[];
+
+interface Tab {
+  id: string;
+  label: string;
+  glyph: string;
+  about: string;
+  count?: number | string;
+  body: () => Child;
+}
+
+// The views under the top info, one at a time behind a tab bar, the way the session page groups its delegation
+// views. The tab is remembered per kind; switching swaps the panel in place so the page keeps its scroll.
+function tabbed(a: Asset, tabs: (Tab | null)[]): HTMLElement {
+  const list = tabs.filter((t): t is Tab => !!t);
+  const current = () => list.find(t => t.id === state.detailTabs[a.kind]) || list[0];
+  const panelOf = () => el('div', { className: 'dv-panel', role: 'tabpanel' }, ([current().body()] as unknown[]).flat(Infinity));
+  const barOf = () => tabBar(list.map(t => [t.id, t.label, t.glyph, t.about, t.count]), current().id, pick, `${kindLabel(a.kind)} views`);
+  let bar = list.length > 1 ? barOf() : null;
+  let panel = panelOf();
+  function pick(id: string, focus?: boolean) {
+    state.detailTabs[a.kind] = id;
+    persist();
+    hideHover();
+    const nextBar = barOf();
+    const nextPanel = panelOf();
+    bar?.replaceWith(nextBar);
+    panel.replaceWith(nextPanel);
+    bar = nextBar;
+    panel = nextPanel;
+    if (focus) (bar.querySelector('.view-tab.active') as HTMLElement | null)?.focus();
+  }
+  return el('div', { className: 'recent dv-tabs' }, el('div', { className: 'group-label' }, 'Contents'), bar, panel);
+}
 
 // `el` flattens one level only; a card body nests groups of rows, so it is flattened fully first.
 const card = (title: string, count: number | string | null, ...body: Child[]) =>
@@ -248,6 +283,14 @@ const normalize = (rel: string) => {
 };
 
 const DOC_TITLE: Record<string, string> = { skill: 'Instructions', agent: 'System prompt', command: 'Prompt', rule: 'Rule', memory: 'Memory', outputStyle: 'Style' };
+const DOC_ABOUT: Record<string, string> = {
+  skill: 'SKILL.md as Claude reads it when the skill runs.',
+  agent: 'The system prompt the agent starts with.',
+  command: 'The prompt the command sends.',
+  rule: 'The rule as Claude reads it.',
+  memory: 'The file as every session here reads it.',
+  outputStyle: 'The style that replaces the default one.',
+};
 
 function docCard(a: Asset, body: string, doc: HTMLElement): HTMLElement {
   const edit = el('button', { type: 'button', className: 'link', onclick: () => setMode('edit') }, icon('edit'), 'Edit');
@@ -328,32 +371,62 @@ function markdownView(d: Detail, draft: Draft): Child[] {
     link: linkHook(a),
   });
   const skills = listField(fieldOf(draft, 'skills'));
-  const side = [
-    outlineCard(headings),
-    ['agent', 'skill', 'command'].includes(a.kind) ? toolsCard(a, tools, blocked) : null,
-    skills.length
-      ? card(
-          'Preloaded skills',
-          skills.length,
-          el(
-            'div',
-            { className: 'ref-list' },
-            skills.map(s => {
-              const e = resolve(s, a);
-              return e ? refRow(e) : el('div', { className: 'dv-empty warn' }, `${s}: no skill with this name`);
-            })
-          )
-        )
-      : null,
-    a.kind === 'rule' ? card('Paths', null, renderRuleInfo(a, false)) : null,
-    card('Mentions', mentions.length, refList(mentions, 'Names no other skill, agent or command.')),
-    card('Mentioned by', mentioned.length, refList(mentioned, 'Nothing in the harness names it.')),
-    a.kind === 'skill' ? filesCard(a) : null,
-  ];
+  const outline = outlineCard(headings);
+  const others = (a.files || []).filter(f => f !== 'SKILL.md');
+  const paths = metaOf(a).paths || [];
   return [
     hero(a, v, draft, description),
     kpisFor(a, draft, description, mentions, mentioned, tools),
-    el('div', { className: 'dv-grid' }, el('div', { className: 'dv-main' }, docCard(a, draft.body, doc)), el('aside', { className: 'dv-side' }, side)),
+    tabbed(a, [
+      {
+        id: 'doc',
+        label: DOC_TITLE[a.kind] || 'Content',
+        glyph: 'book',
+        about: DOC_ABOUT[a.kind] || 'The file as Claude reads it.',
+        body: () => (outline ? el('div', { className: 'dv-grid' }, el('div', { className: 'dv-main' }, docCard(a, draft.body, doc)), el('aside', { className: 'dv-side' }, outline)) : docCard(a, draft.body, doc)),
+      },
+      ['agent', 'skill', 'command'].includes(a.kind)
+        ? { id: 'tools', label: 'Tools', glyph: 'tools', about: 'The tools it may use: Claude Code\'s own, then each MCP server\'s.', count: tools.length || 'all', body: () => toolsCard(a, tools, blocked) }
+        : null,
+      skills.length
+        ? {
+            id: 'skills',
+            label: 'Preloaded skills',
+            glyph: 'mortar-board',
+            about: 'Skills loaded into the agent when it starts.',
+            count: skills.length,
+            body: () =>
+              card(
+                'Preloaded skills',
+                skills.length,
+                el(
+                  'div',
+                  { className: 'ref-list' },
+                  skills.map(s => {
+                    const e = resolve(s, a);
+                    return e ? refRow(e) : el('div', { className: 'dv-empty warn' }, `${s}: no skill with this name`);
+                  })
+                )
+              ),
+          }
+        : null,
+      a.kind === 'rule' ? { id: 'paths', label: 'Paths', glyph: 'filter', about: 'The globs that load the rule, and the files each one matches.', count: paths.length, body: () => card('Paths', null, renderRuleInfo(a, false)) } : null,
+      {
+        id: 'links',
+        label: 'Links',
+        glyph: 'references',
+        about: 'The skills, agents and commands it names, and the ones that name it.',
+        count: mentions.length + mentioned.length,
+        body: () =>
+          el(
+            'div',
+            { className: 'dv-columns' },
+            card('Mentions', mentions.length, refList(mentions, 'Names no other skill, agent or command.')),
+            card('Mentioned by', mentioned.length, refList(mentioned, 'Nothing in the harness names it.'))
+          ),
+      },
+      a.kind === 'skill' && others.length ? { id: 'files', label: 'Files', glyph: 'files', about: 'The references, scripts and other files beside SKILL.md.', count: others.length, body: () => filesCard(a) } : null,
+    ]),
   ];
 }
 
@@ -404,18 +477,26 @@ function mcpView(d: Detail): Child[] {
     tile(info && !info.error ? fmtTokens(toolList.reduce((n, t) => n + tokens(`${t.name} ${t.description}`), 0)) : '...', 'Tool list', 'layers', 'tokens of names and descriptions'),
     tile(v && v.id !== 'global' ? v.label : 'Global', 'Scope', v && v.id !== 'global' ? 'repo' : 'globe', sourceName(a))
   );
-  const tools = card(
-    'Tools',
-    info && !info.error ? toolList.length : null,
-    !info
-      ? el('div', { className: 'dv-empty' }, 'Asking the server for its tools...')
-      : info.error
-        ? el('div', { className: 'dv-empty' }, 'No tool list while the server does not answer.')
-        : el('div', { className: 'dv-tool-cards' }, toolList.map(t => el('div', { className: 'dv-tool-card' }, el('span', { className: 'dv-tool-name' }, t.name), t.description ? el('span', { className: 'dv-tool-desc', title: t.description }, t.description) : null)))
-  );
-  const instructions = info && info.instructions ? card('Server instructions', null, renderMarkdown(info.instructions).node) : null;
-  const config = d.body ? card('Config', null, el('pre', { className: 'md-pre' }, el('code', {}, d.body))) : null;
-  return [heroCard, kpis, tools, instructions, config];
+  const tools = () =>
+    card(
+      'Tools',
+      info && !info.error ? toolList.length : null,
+      !info
+        ? el('div', { className: 'dv-empty' }, 'Asking the server for its tools...')
+        : info.error
+          ? el('div', { className: 'dv-empty' }, 'No tool list while the server does not answer.')
+          : el('div', { className: 'dv-tool-cards' }, toolList.map(t => el('div', { className: 'dv-tool-card' }, el('span', { className: 'dv-tool-name' }, t.name), t.description ? el('span', { className: 'dv-tool-desc', title: t.description }, t.description) : null)))
+    );
+  const instructions = info && info.instructions ? info.instructions : '';
+  return [
+    heroCard,
+    kpis,
+    tabbed(a, [
+      { id: 'tools', label: 'Tools', glyph: 'tools', about: 'Every tool the server offers, with the description Claude reads.', count: info && !info.error ? toolList.length : undefined, body: tools },
+      instructions ? { id: 'instructions', label: 'Server instructions', glyph: 'book', about: 'What the server tells Claude about using its tools.', body: () => card('Server instructions', null, renderMarkdown(instructions).node) } : null,
+      d.body ? { id: 'config', label: 'Config', glyph: 'json', about: 'The entry that registers the server.', body: () => card('Config', null, el('pre', { className: 'md-pre' }, el('code', {}, d.body))) } : null,
+    ]),
+  ];
 }
 
 function pluginView(d: Detail): Child[] {
@@ -443,13 +524,11 @@ function pluginView(d: Detail): Child[] {
   return [
     heroCard,
     el('div', { className: 'kpis' }, tile(String(skills.length), 'Skills', 'mortar-board', 'in every session'), tile(String(agents.length), 'Agents', 'hubot', 'Claude can delegate to'), tile(String(servers.length), 'MCP servers', 'server', 'started with Claude Code'), tile(version || '-', 'Version', 'tag', market || '')),
-    el(
-      'div',
-      { className: 'dv-columns' },
-      card('Skills', skills.length, refList(skills, a.enabled ? 'No skills.' : 'Enable the plugin to list them.')),
-      card('Agents', agents.length, refList(agents, a.enabled ? 'No agents.' : 'Enable the plugin to list them.')),
-      card('MCP servers', servers.length, refList(servers, 'No MCP servers.'))
-    ),
+    tabbed(a, [
+      { id: 'skills', label: 'Skills', glyph: 'mortar-board', about: 'The skills the plugin adds to every session.', count: skills.length, body: () => card('Skills', skills.length, refList(skills, a.enabled ? 'No skills.' : 'Enable the plugin to list them.')) },
+      { id: 'agents', label: 'Agents', glyph: 'hubot', about: 'The agents the plugin adds, which Claude can delegate to.', count: agents.length, body: () => card('Agents', agents.length, refList(agents, a.enabled ? 'No agents.' : 'Enable the plugin to list them.')) },
+      { id: 'servers', label: 'MCP servers', glyph: 'server', about: 'The MCP servers the plugin starts with Claude Code.', count: servers.length, body: () => card('MCP servers', servers.length, refList(servers, 'No MCP servers.')) },
+    ]),
   ];
 }
 
@@ -463,19 +542,28 @@ function codeView(d: Detail, body: string): Child[] {
       el('div', { className: 'dv-kicker' }, el('span', {}, kindLabel(a.kind)), el('span', { className: 'dv-origin' }, originText(a, viewOf(a.scope) || undefined))),
       a.description ? el('p', { className: 'dv-desc' }, a.description) : null
     ),
-    el(
-      'section',
-      { className: 'dv-card dv-doc' },
-      el(
-        'div',
-        { className: 'dv-card-head' },
-        el('span', { className: 'dv-card-title' }, label),
-        el('span', { className: 'dv-count' }, plural(lines(body), 'line')),
-        el('span', { className: 'dv-spacer' }),
-        d.mode === 'json' ? null : el('button', { type: 'button', className: 'link', onclick: () => setMode('edit') }, icon('edit'), 'Edit')
-      ),
-      el('pre', { className: 'md-pre dv-code' }, el('code', {}, body))
-    ),
+    tabbed(a, [
+      {
+        id: 'doc',
+        label,
+        glyph: 'json',
+        about: '',
+        body: () =>
+          el(
+            'section',
+            { className: 'dv-card dv-doc' },
+            el(
+              'div',
+              { className: 'dv-card-head' },
+              el('span', { className: 'dv-card-title' }, label),
+              el('span', { className: 'dv-count' }, plural(lines(body), 'line')),
+              el('span', { className: 'dv-spacer' }),
+              d.mode === 'json' ? null : el('button', { type: 'button', className: 'link', onclick: () => setMode('edit') }, icon('edit'), 'Edit')
+            ),
+            el('pre', { className: 'md-pre dv-code' }, el('code', {}, body))
+          ),
+      },
+    ]),
   ];
 }
 

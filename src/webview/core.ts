@@ -37,12 +37,13 @@ export const state: State = {
   styleModel: saved.styleModel || 'sonnet',
   repoTab: saved.repoTab || 'overview',
   detailMode: saved.detailMode || 'view',
+  detailTabs: saved.detailTabs || {},
   history: [],
 };
 
 export const app = document.getElementById('app') as HTMLElement;
 
-export const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], listViews: state.listViews, foldedGroups: [...state.foldedGroups], repoSort: state.repoSort, sessionView: state.sessionView, decisionView: state.decisionMode, mapMode: state.mapMode, billing: state.billing, styleModel: state.styleModel, repoTab: state.repoTab, detailMode: state.detailMode });
+export const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], listViews: state.listViews, foldedGroups: [...state.foldedGroups], repoSort: state.repoSort, sessionView: state.sessionView, decisionView: state.decisionMode, mapMode: state.mapMode, billing: state.billing, styleModel: state.styleModel, repoTab: state.repoTab, detailMode: state.detailMode, detailTabs: state.detailTabs });
 
 export const SOURCES = {
   user: { icon: 'account', label: 'Your config (~/.claude.json)' },
