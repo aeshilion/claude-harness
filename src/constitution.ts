@@ -18,7 +18,10 @@ export interface CheckSummary {
   review?: number;
   kind?: string;
   error?: string;
-  findings?: { level: string; text: string; file?: string; line?: number }[];
+  findings?: { level: string; text: string; code?: string; file?: string; line?: number }[];
+  /** Root CLAUDE.md measures the provider reports. */
+  lines?: number;
+  emDashes?: number;
 }
 
 const mtime = (file: string) => {
@@ -75,11 +78,12 @@ export class Constitution {
 
   summary(dir: string, withFindings = false): CheckSummary {
     const c = this.get(dir);
-    const s: CheckSummary = { state: c.state, fail: c.result?.fail, review: c.result?.review, kind: c.result?.kind, error: c.error };
+    const s: CheckSummary = { state: c.state, fail: c.result?.fail, review: c.result?.review, kind: c.result?.kind, error: c.error, lines: c.result?.metrics?.lines, emDashes: c.result?.metrics?.emDashes };
     if (withFindings && c.result)
       s.findings = c.result.findings.map(f => ({
         level: f.level,
         text: f.text,
+        code: f.code,
         file: f.locations[0] ? path.join(dir, ...f.locations[0].file.split('/')) : undefined,
         line: f.locations[0]?.line ?? undefined,
       }));

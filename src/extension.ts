@@ -204,7 +204,18 @@ export function activate(context: vscode.ExtensionContext): void {
     find,
     refresh,
     checks: () => Object.fromEntries(repoViews().map(v => [v.id, constitution.summary(v.path)])),
-    standard: () => (provider ? { name: provider.name, fix: !!provider.fix, scaffold: !!provider.scaffold, align: !!provider.align, owner: !!provider.ownerPattern } : undefined),
+    standard: () =>
+      provider
+        ? {
+            name: provider.name,
+            fix: !!provider.fix,
+            scaffold: !!provider.scaffold,
+            align: !!provider.align,
+            owner: !!provider.ownerPattern,
+            doc: provider.standard && fs.existsSync(provider.standard) ? provider.standard : undefined,
+            docText: provider.standard && fs.existsSync(provider.standard) ? fs.readFileSync(provider.standard, 'utf8') : undefined,
+          }
+        : undefined,
     ensureChecks: ids => constitution.ensure(ids.map(id => viewOfScope(id)?.path).filter((p): p is string => !!p && p !== global.base)),
     fleet: () => {
       constitution.ensure(repoViews().map(v => v.path));

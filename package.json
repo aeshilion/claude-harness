@@ -2,7 +2,7 @@
   "name": "claude-harness",
   "displayName": "Claude Harness",
   "description": "Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.",
-  "version": "0.2.26",
+  "version": "0.2.31",
   "publisher": "integrations-at",
   "license": "CC-BY-NC-SA-4.0",
   "icon": "media/icon.png",
@@ -529,8 +529,10 @@
     ]
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run webview",
+    "webview": "tsc -p src/webview && node scripts/webview.mjs",
     "watch": "tsc -watch -p ./",
+    "watch:webview": "node scripts/webview.mjs --watch",
     "test": "npm run compile && node --test \"out/test/unit/**/*.test.js\"",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package"
@@ -544,6 +546,7 @@
     "@types/node": "^22.20.5",
     "@types/vscode": "^1.100.0",
     "@vscode/vsce": "^4.0.0",
+    "esbuild": "0.28.2",
     "typescript": "^5.9.3"
   }
 }

@@ -89,6 +89,8 @@ export interface Asset {
   meta?: AssetMeta;
   /** Where a symlinked skill folder points. */
   link?: string;
+  /** Names the body mentions as code spans or slash commands, and the agents and skills its frontmatter names. */
+  refs?: string[];
 }
 
 /** Frontmatter facts the type pages filter on. */
@@ -446,6 +448,34 @@ export function versionOf(data: Record<string, unknown>): string | undefined {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
 }
 
+const REF_TOKEN = /^\/?([a-z0-9][a-z0-9._-]*(?::[a-z0-9][a-z0-9._-]*)?)$/i;
+const REF_PATH = /(?:^|[\\/])(skills|agents|commands)[\\/]([a-z0-9][a-z0-9_-]*)(?:\.md)?(?:[\\/]|$)/i;
+const REF_CONTEXT = /\b(skill|agent|command|plugin|subagent)s?\b/i;
+
+/**
+ * Candidate names of skills, agents and commands a markdown file mentions; the panel resolves them against the
+ * roster. A code span counts when it is hyphenated or plugin-qualified (`create-pptx`, `learn-loop-plugin:claude-learn`),
+ * names a path into a skills, agents or commands folder, or is a single word on a line that says skill, agent,
+ * command or plugin (so `status` in prose is not the cache-tax skill). Slash commands count as written.
+ */
+export function refsOf(body: string, data: Record<string, unknown> = {}): string[] | undefined {
+  const found = new Set<string>();
+  const add = (token: string) => {
+    const m = REF_TOKEN.exec(token.trim());
+    if (m && m[1].length > 2 && !/^\d/.test(m[1])) found.add(m[1].toLowerCase());
+  };
+  for (const line of body.split('\n'))
+    for (const m of line.matchAll(/`([^`\n]{3,120})`/g)) {
+      const span = m[1].trim();
+      const path = REF_PATH.exec(span);
+      if (path) found.add(path[2].toLowerCase());
+      else if (/[-:]/.test(span) || /^\//.test(span) || REF_CONTEXT.test(line)) add(span);
+    }
+  for (const m of body.matchAll(/(?:^|[\s(])\/([a-z][a-z0-9-]*(?::[a-z0-9-]+)?)(?=[\s).,;:]|$)/gm)) add(m[1]);
+  for (const key of ['skills', 'agent']) listOf(data[key]).forEach(add);
+  return found.size ? [...found].slice(0, 120) : undefined;
+}
+
 export function metaOf(data: Record<string, unknown>): AssetMeta | undefined {
   const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
   const list = (v: unknown) => (listOf(v).length ? listOf(v) : undefined);
@@ -464,8 +494,8 @@ function markdownAssets(scope: HarnessScope, dir: string, kind: Kind, recursive:
   return listFiles(dir, n => n.toLowerCase().endsWith('.md'), recursive).map(rel => {
     const file = path.join(dir, rel);
     const name = nameOf(rel);
-    const { data } = readMarkdown(file);
-    return { id: `${scope.id}|${kind}:${name}`, scope: scope.id, kind, name, description: oneLine(data.description), version: versionOf(data), file, mtime: mtimeOf(file), meta: metaOf(data) };
+    const { data, body } = readMarkdown(file);
+    return { id: `${scope.id}|${kind}:${name}`, scope: scope.id, kind, name, description: oneLine(data.description), version: versionOf(data), file, mtime: mtimeOf(file), meta: metaOf(data), refs: refsOf(body, data) };
   });
 }
 
@@ -530,7 +560,7 @@ function skillAssets(scope: HarnessScope, skillsDir: string): Asset[] {
     const dir = path.join(skillsDir, entry.name);
     const file = path.join(dir, 'SKILL.md');
     if (!fs.statSync(dir).isDirectory() || !fs.existsSync(file)) continue;
-    const { data } = readMarkdown(file);
+    const { data, body } = readMarkdown(file);
     out.push({
       id: `${scope.id}|skill:${entry.name}`,
       scope: scope.id,
@@ -543,6 +573,7 @@ function skillAssets(scope: HarnessScope, skillsDir: string): Asset[] {
       files: listFiles(dir, () => true, true).map(f => f.split(path.sep).join('/')),
       mtime: mtimeOf(file),
       meta: metaOf(data),
+      refs: refsOf(body, data),
       link: fs.lstatSync(dir).isSymbolicLink() ? fs.realpathSync(dir) : undefined,
     });
   }
@@ -556,7 +587,7 @@ export function scan(scope: HarnessScope): Category[] {
 
   for (const rel of scope.memory) {
     const file = path.join(scope.base, rel);
-    if (fs.existsSync(file)) items.get('memory')!.push(make('memory', rel, { name: rel, description: '', file, mtime: mtimeOf(file) }));
+    if (fs.existsSync(file)) items.get('memory')!.push(make('memory', rel, { name: rel, description: '', file, mtime: mtimeOf(file), refs: refsOf(readMarkdown(file).body) }));
   }
 
   items.set('rule', markdownAssets(scope, path.join(root, 'rules'), 'rule', true, stripMd));
