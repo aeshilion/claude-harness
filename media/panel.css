@@ -444,9 +444,9 @@ pre.json {
 .scope-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-top: 14px;
-  padding: 6px 12px 4px;
+  padding: 6px 8px 4px 12px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1155,9 +1155,12 @@ table.grid .cell {
   width: 18px;
 }
 
+/* Sidebar heads line up in columns: one fixed-width count, then 22px action slots leftward from it. */
+.section-head .count,
+.scope-head .count,
 .repo-head .count {
   flex: none;
-  min-width: 28px;
+  min-width: 36px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -1224,7 +1227,22 @@ table.grid .cell {
 .hc.hc-tip {
   gap: 6px;
   max-width: 300px;
+  max-height: 25vh;
   padding: 9px 12px;
+}
+
+.hc-tip .hc-head {
+  flex: none;
+}
+
+.hc-tip .hc-text.tip-lines {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hc-tip .hc-text.tip-lines.cut {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
 }
 
 .tl-hover:has(.hc-tip) {
@@ -2217,4 +2235,1171 @@ mark {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 420px;
+}
+
+/* Type pages: search, preset filters, facet chips and the element table. */
+.kind-search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kind-search .combo {
+  max-width: 720px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.preset,
+.filter-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.preset:hover,
+.filter-add:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.preset.on {
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+}
+
+.preset-n {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.preset.on .preset-n {
+  color: inherit;
+}
+
+.filter-add {
+  padding-left: 6px;
+  border-style: dashed;
+  color: var(--vscode-descriptionForeground);
+}
+
+.filter-add:hover {
+  color: var(--vscode-foreground);
+}
+
+.filter-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 3px 4px;
+  background: var(--vscode-panel-border);
+}
+
+.preset:focus-visible,
+.filter-add:focus-visible,
+.tile:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.asset-table {
+  container-type: inline-size;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.at-row {
+  display: grid;
+  grid-template-columns: var(--at-cols);
+  column-gap: 16px;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--vscode-panel-border);
+  cursor: pointer;
+}
+
+.at-row:first-child {
+  border-top: none;
+}
+
+.at-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.at-row:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.at-row.at-head {
+  min-height: 28px;
+  cursor: default;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-editorWidget-background);
+}
+
+.at-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.at-name .swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.at-row.static {
+  cursor: default;
+}
+
+.at-row.static:hover {
+  background: transparent;
+}
+
+.at-label,
+.at-cell,
+.at-fact {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.at-muted {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.at-fact {
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.at-fact.on {
+  color: var(--vscode-foreground);
+}
+
+.at-fact.warn,
+.at-cell.warn {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.at-head .at-cell,
+.at-head .at-fact {
+  font-size: 11px;
+  color: inherit;
+}
+
+.at-row.disabled .at-label,
+.at-row.disabled .at-name {
+  opacity: 0.6;
+}
+
+.at-indent {
+  flex: none;
+  width: calc(var(--depth, 0) * 16px);
+}
+
+@container (max-width: 620px) {
+  .at-row {
+    grid-template-columns: var(--at-cols-narrow);
+  }
+
+  .at-wide {
+    display: none;
+  }
+}
+
+/* Origin groups: the sidebar's sub-heads and the type page's one table per origin. */
+/* Group headers, sidebar and type page alike: chevron, glyph, the name in sentence case, a muted count. */
+.origin-head,
+.origin-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  user-select: none;
+}
+
+.origin-head {
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 12px 0 8px;
+}
+
+.row.in-group {
+  padding-left: 30px;
+}
+
+.row.nested.in-group {
+  padding-left: 48px;
+}
+
+.origin-head:hover,
+.origin-label:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.origin-head:focus-visible,
+.origin-label:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.origin-head.nested {
+  padding-left: 26px;
+}
+
+.origin-head > .codicon:first-child,
+.origin-label > .codicon:first-child {
+  opacity: 0.7;
+}
+
+.origin-head .label,
+.origin-label .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.origin-n {
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.row .desc.warn {
+  opacity: 1;
+}
+
+.kind-results,
+.origin-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.kind-results {
+  gap: 4px;
+}
+
+.origin-section + .origin-section {
+  margin-top: 14px;
+}
+
+.origin-label {
+  gap: 8px;
+  min-height: 28px;
+  margin: 2px 0 6px;
+  padding: 0 6px 0 2px;
+  border-radius: 4px;
+}
+
+/* Repo page: compact harness tiles and the tab counts. */
+.overview.compact {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.overview.compact .tile {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.overview.compact .tile .n {
+  min-width: 2.5ch;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview.compact .tile.zero {
+  opacity: 0.55;
+}
+
+.overview.compact .tile.zero:hover {
+  opacity: 1;
+}
+
+.tab-count {
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preset,
+  .filter-add {
+    transition: none;
+  }
+}
+
+/* Detail pages, view mode: summary card, KPI tiles, the document and its side cards. */
+.mode-switch {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mode-btn:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.mode-btn.active {
+  background: var(--vscode-button-secondaryBackground, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-list-activeSelectionForeground));
+}
+
+.mode-btn:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.dv {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dv-hero,
+.dv-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.dv-hero {
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.dv-card {
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.dv-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-origin {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 12px;
+}
+
+.dv-desc {
+  max-width: 100ch;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.dv-desc.clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.dv-desc.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-desc.warn,
+.dv-empty.warn {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.dv-more {
+  margin-top: 4px;
+}
+
+.dv-phrases,
+.dv-chips,
+.dv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.dv-actions {
+  gap: 8px 16px;
+}
+
+.dv-phrases-label {
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-phrases.collapsed .extra {
+  display: none;
+}
+
+.dv-phrase {
+  padding: 2px 9px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 12px;
+}
+
+.dv-phrase::before {
+  content: '\201C';
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-phrase::after {
+  content: '\201D';
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-phrase.more {
+  cursor: pointer;
+  color: var(--vscode-textLink-foreground, var(--vscode-textLink-activeForeground));
+}
+
+.dv-phrase.more::before,
+.dv-phrase.more::after {
+  content: none;
+}
+
+.dv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 1px 9px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.dv-chip .k {
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-chip .codicon {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.dv-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dv-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.dv-note {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-editorWarning-foreground);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground) 10%, transparent);
+}
+
+.dv-notice > span {
+  flex: 1;
+  min-width: 200px;
+}
+
+.dv-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.dv-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-spacer {
+  flex: 1;
+}
+
+.dv-card-head button.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dv-empty {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+
+.dv-main,
+.dv-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.dv-side {
+  gap: 12px;
+}
+
+@container (max-width: 860px) {
+  .dv-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dv-side {
+    order: -1;
+  }
+}
+
+.dv-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* The rendered document. */
+.md {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md-h {
+  margin: 1.3em 0 0.45em;
+  font-weight: 600;
+  line-height: 1.3;
+  scroll-margin-top: 12px;
+}
+
+.md-h1 {
+  font-size: 19px;
+}
+
+.md-h2 {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 16px;
+}
+
+.md-h3 {
+  font-size: 14px;
+}
+
+.md-h4,
+.md-h5,
+.md-h6 {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.md-p {
+  max-width: 100ch;
+  margin: 0 0 0.75em;
+}
+
+.md-list {
+  max-width: 100ch;
+  margin: 0 0 0.75em;
+  padding-left: 1.4em;
+}
+
+.md-list li {
+  margin: 0.2em 0;
+}
+
+.md-list .md-list {
+  margin-bottom: 0;
+}
+
+.md-pre {
+  margin: 0 0 0.9em;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.dv-code {
+  max-height: 70vh;
+  margin: 0;
+}
+
+.md-code-span {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.92em;
+}
+
+.md-link {
+  color: var(--vscode-textLink-foreground, var(--vscode-textLink-activeForeground));
+  text-decoration: none;
+}
+
+.md-link:hover {
+  text-decoration: underline;
+}
+
+.md-quote {
+  margin: 0 0 0.75em;
+  padding: 2px 12px;
+  border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border));
+  color: var(--vscode-descriptionForeground);
+}
+
+.md-table-wrap {
+  max-width: 100%;
+  margin: 0 0 0.9em;
+  overflow-x: auto;
+}
+
+.md-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.md-table th,
+.md-table td {
+  padding: 4px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+  font-weight: 600;
+}
+
+.md-hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+/* References: inline in the document and as rows in the side cards. Hover previews, click opens. */
+.ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--vscode-textLink-foreground, var(--vscode-focusBorder)) 13%, transparent);
+  color: var(--vscode-textLink-foreground, var(--vscode-textLink-activeForeground));
+  font: inherit;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.92em;
+  line-height: 1.5;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+
+.ref .codicon {
+  font-size: 12px;
+}
+
+.ref:hover {
+  background: color-mix(in srgb, var(--vscode-textLink-foreground, var(--vscode-focusBorder)) 22%, transparent);
+}
+
+.ref:focus-visible,
+.ref-row:focus-visible,
+.dv-file:focus-visible,
+.dv-outline-item:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 0;
+}
+
+.ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ref-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ref-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.ref-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ref-kind {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.ref-from {
+  max-width: 120px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dv-tools + .dv-tools {
+  padding-top: 8px;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.dv-tools-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dv-tools-head .dv-count {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.dv-tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dv-tool {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 11px;
+}
+
+.dv-tools.blocked .dv-tool {
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.dv-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dv-file > span:last-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dv-file:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.origin-label.dv-folder {
+  min-height: 24px;
+  margin: 2px 0;
+  font-size: 12px;
+}
+
+.dv-outline {
+  display: flex;
+  flex-direction: column;
+}
+
+.dv-outline-item {
+  padding: 3px 8px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dv-outline-item:hover {
+  border-left-color: var(--vscode-focusBorder);
+  color: var(--vscode-foreground);
+}
+
+.dv-outline-item.depth-1 {
+  padding-left: 20px;
+}
+
+.dv-outline-item.depth-2 {
+  padding-left: 32px;
+}
+
+.dv-tool-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.dv-tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.dv-tool-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dv-tool-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* The repo page's harness standard card. */
+.std-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.std-status .dv-desc {
+  flex: 1;
+  min-width: 260px;
+}
+
+.std-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+}
+
+.std-pill.ok {
+  color: var(--vscode-testing-iconPassed, #73c991);
+  background: color-mix(in srgb, var(--vscode-testing-iconPassed, #73c991) 14%, transparent);
+}
+
+.std-pill.bad {
+  color: var(--vscode-errorForeground);
+  background: color-mix(in srgb, var(--vscode-errorForeground) 14%, transparent);
+}
+
+.std-pill.warn {
+  color: var(--vscode-editorWarning-foreground);
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground) 14%, transparent);
+}
+
+.std-pill.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.dv-chip.warn {
+  border-color: var(--vscode-editorWarning-foreground);
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.std-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.std-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.std-finding {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.std-finding {
+  cursor: pointer;
+}
+
+button.std-finding:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.std-finding.fail > .codicon {
+  color: var(--vscode-errorForeground);
+}
+
+.std-finding.review > .codicon {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.std-text {
+  overflow-wrap: anywhere;
+}
+
+.std-where {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.std-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.std-actions button.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.std-doc {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding-top: 10px;
+}
+
+.std-doc > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  list-style: none;
+}
+
+.std-doc > summary::-webkit-details-marker {
+  display: none;
+}
+
+.std-doc > summary::before {
+  content: '\203A';
+  display: inline-block;
+  width: 10px;
+  transition: transform 120ms ease;
+}
+
+.std-doc[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.std-doc > summary:hover {
+  color: var(--vscode-foreground);
+}
+
+.std-doc > .md {
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .std-doc > summary::before {
+    transition: none;
+  }
+}
+
+/* The hover card of a referenced element. */
+.hc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.hc-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  font-size: 11px;
+}
+
+.hc-chip.more {
+  color: var(--vscode-descriptionForeground);
+}
+
+.clamp-4 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
