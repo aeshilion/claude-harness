@@ -175,7 +175,7 @@ export function renderCost(d, colors) {
   }));
   // The plan set for the session's account in the settings is the default; a click on the switch overrides it.
   const billingId = state.billingPick || (BILLING.some(b => b[0] === d.plan) ? d.plan : state.billing);
-  const [, planLabel, , grant] = BILLING.find(b => b[0] === billingId) || BILLING[BILLING.length - 1];
+  const [, , , grant] = BILLING.find(b => b[0] === billingId) || BILLING[BILLING.length - 1];
   const fmt = grant ? v => fmtShare(v, grant) : fmtUsd;
   const plans = modeSwitch(
     app,
@@ -195,18 +195,7 @@ export function renderCost(d, colors) {
       'div',
       { className: 'cost-head' },
       el('div', {}, el('div', { className: 'cost-k' }, grant ? 'Weekly limit used' : 'Estimated cost'), el('div', { className: 'cost-v' }, fmt(total), grant ? '*' : '')),
-      plans,
-      el(
-        'div',
-        { className: 'cost-basis' },
-        grant
-          ? [
-              billingAbout(planLabel, grant),
-              el('div', {}, '* Not exact prices: Anthropic publishes no figure for a weekly limit, so this is an estimate.'),
-              TEAM_PLANS.has(billingId) ? el('div', {}, 'Team plans expose no rate limits to Claude Code, so the share cannot be read from the status line.') : null,
-            ]
-          : 'At Anthropic API list prices for the tokens in this session and its agents. A Claude subscription bills differently.'
-      )
+      plans
     ),
     total > 0
       ? [
