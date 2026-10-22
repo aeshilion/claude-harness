@@ -10,7 +10,8 @@
     filter: saved.filter || '',
     overviewFilter: '',
     expanded: new Set(saved.expanded || []),
-    mcpSort: saved.mcpSort || 'name',
+    listViews: Object.assign({ mcp: saved.mcpView, skill: saved.skillView }, saved.listViews),
+    foldedGroups: new Set(saved.foldedGroups || []),
     repoSort: saved.repoSort || 'recent',
     mcpInfo: {},
     checks: {},
@@ -28,6 +29,7 @@
     mapMode: saved.mapMode || 'timeline',
     billing: saved.billing || 'api',
     styleModel: saved.styleModel || 'sonnet',
+    repoTab: saved.repoTab || 'overview',
   };
   const app = document.getElementById('app');
 
@@ -48,7 +50,7 @@
   const logo = size => (document.body.dataset.logo ? el('img', { className: `logo ${size}`, src: document.body.dataset.logo, alt: '' }) : icon('hubot'));
   const iconBtn = (name, title, onclick, disabled) => el('button', { className: 'icon-btn', title, 'aria-label': title, onclick, disabled }, icon(name));
 
-  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], mcpSort: state.mcpSort, repoSort: state.repoSort, sessionView: state.sessionView, decisionView: state.decisionMode, mapMode: state.mapMode, billing: state.billing, styleModel: state.styleModel });
+  const persist = () => vscode.setState({ filter: state.filter, expanded: [...state.expanded], openRepos: [...state.openRepos], listViews: state.listViews, foldedGroups: [...state.foldedGroups], repoSort: state.repoSort, sessionView: state.sessionView, decisionView: state.decisionMode, mapMode: state.mapMode, billing: state.billing, styleModel: state.styleModel, repoTab: state.repoTab });
   const SOURCES = {
     user: { icon: 'account', label: 'Your config (~/.claude.json)' },
     local: { icon: 'lock', label: 'Local to this repo (~/.claude.json)' },
@@ -60,14 +62,115 @@
   const labelOf = a =>
     a.kind !== 'mcp' ? a.name : a.source === 'claude.ai' ? a.name.replace(/^claude\.ai /, '') : a.source === 'plugin' ? a.name.split(':').slice(2).join(':') : a.name;
   const pluginOf = a => (a.source === 'plugin' ? a.name.split(':')[1] : '');
-  const mcpDesc = a => [pluginOf(a) && `${pluginOf(a)} plugin`, a.enabled === false ? 'off' : a.offIn ? `off in ${a.offIn} folders` : '', a.status || a.target].filter(Boolean).join(' · ');
+  const mcpDesc = a => [pluginOf(a) && pluginLabel(pluginOf(a)), a.enabled === false ? 'off' : a.offIn ? `off in ${a.offIn} folders` : '', a.status || a.target].filter(Boolean).join(' · ');
   const assetDesc = a => [a.version && `v${a.version}`, a.copies && a.copies.length ? `also in ${a.copies.map(c => `${c.label} (${c.same ? 'identical' : 'differs'})`).join(', ')}` : '', a.description].filter(Boolean).join(' · ');
   const statusRank = a => (a.enabled === false ? 9 : /^connected/i.test(a.status || '') ? 0 : /auth/i.test(a.status || '') ? 1 : /not configured/i.test(a.status || '') ? 3 : 2);
   const byLabel = (a, b) => labelOf(a).localeCompare(labelOf(b)) || a.name.localeCompare(b.name);
   const SORTS = {
     name: byLabel,
-    source: (a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source) || byLabel(a, b),
+    source: (a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source) || pluginOf(a).localeCompare(pluginOf(b)) || byLabel(a, b),
     status: (a, b) => statusRank(a) - statusRank(b) || byLabel(a, b),
+  };
+  // Where an MCP server comes from: registered by hand (your config, local, .mcp.json), a claude.ai connector, or a plugin.
+  const ORIGINS = [
+    ['manual', 'Registered manually', 'account'],
+    ['claude.ai', 'claude.ai connectors', 'cloud'],
+    ['plugin', 'From plugins', 'extensions'],
+  ];
+  const originOf = a => (a.source === 'claude.ai' || a.source === 'plugin' ? a.source : 'manual');
+  const mcpKey = a => labelOf(a).toLowerCase().replace(/[^a-z0-9]/g, '');
+  // The same server registered twice, such as a claude.ai connector and a plugin server of one name.
+  const twinsOf = a => {
+    if (a.kind !== 'mcp') return [];
+    const view = viewOf(a.scope) || state.views[0];
+    const cat = view && view.categories.find(c => c.kind === 'mcp');
+    return (cat ? cat.items : []).filter(b => b !== a && mcpKey(b) === mcpKey(a) && (b.source !== a.source || pluginOf(b) !== pluginOf(a)));
+  };
+  const sourceName = a => (a.source === 'plugin' ? pluginLabel(pluginOf(a)) : a.source === 'claude.ai' ? 'claude.ai connector' : a.source === 'project' ? '.mcp.json' : a.source === 'local' ? 'local config' : 'your config');
+  const twinText = a => twinsOf(a).map(sourceName).join(', ');
+  // Skills: your own folders, folders linked in from elsewhere, and the skills of enabled plugins.
+  const SKILL_ORIGINS = [
+    ['own', 'Own skills', 'mortar-board'],
+    ['linked', 'Linked', 'link'],
+    ['plugin', 'From plugins', 'extensions'],
+  ];
+  const skillOriginOf = a => (a.source === 'plugin' ? 'plugin' : a.link ? 'linked' : 'own');
+  const skillPluginOf = a => (a.source === 'plugin' && String(a.scope).startsWith('plugin:') ? a.scope.slice('plugin:'.length).split('@')[0] : '');
+  // The folder a linked skill lives in: the repo above `.claude`, else the folder above `skills` (such as ~/.agents).
+  const linkName = file => {
+    const parts = String(file).split(/[\\/]/).filter(Boolean);
+    const at = parts.indexOf('.claude') > 0 ? parts.indexOf('.claude') : parts.lastIndexOf('skills');
+    return at > 0 ? parts[at - 1] : parts.slice(-2, -1).join('');
+  };
+  const pluginLabel = name => `${name.replace(/-plugin$/, '')} plugin`;
+  // The second line of a skill row: facts only, never the trigger-phrase description (that is in the hover card).
+  const skillByline = a =>
+    [
+      skillPluginOf(a) && pluginLabel(skillPluginOf(a)),
+      a.link && `linked from ${linkName(a.link)}`,
+      a.version && `v${a.version}`,
+      (a.files || []).length > 1 && `${a.files.length} files`,
+      a.copies && a.copies.length ? `also in ${a.copies.map(c => `${c.label} (${c.same ? 'identical' : 'differs'})`).join(', ')}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const byRecent = (a, b) => (b.mtime || 0) - (a.mtime || 0) || byName(a, b);
+  const AGENT_ORIGINS = [
+    ['own', 'Own agents', 'hubot'],
+    ['plugin', 'From plugins', 'extensions'],
+  ];
+  const RULE_GROUPS = [
+    ['always', 'Always loaded', 'law'],
+    ['scoped', 'Path-scoped', 'filter'],
+  ];
+  const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'Notification', 'SubagentStop', 'Stop', 'PreCompact', 'SessionEnd'];
+  const eventOf = a => a.name.split(' · ')[0];
+  const eventRank = e => (HOOK_EVENTS.includes(e) ? HOOK_EVENTS.indexOf(e) : HOOK_EVENTS.length);
+  const marketOf = a => a.name.split('@')[1] || 'local';
+  // Grouped lists, in the sidebar and on the type pages. `of` names an item's group, `groups(items)` lists the
+  // groups in order as [id, label, glyph], `within` orders a group. The View: picker starts on `group`.
+  const LIST_VIEWS = {
+    mcp: {
+      group: 'source',
+      of: originOf,
+      groups: () => ORIGINS,
+      within: (a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source) || pluginOf(a).localeCompare(pluginOf(b)) || byLabel(a, b),
+      sorts: { name: SORTS.name, status: SORTS.status },
+    },
+    skill: { group: 'source', of: skillOriginOf, groups: () => SKILL_ORIGINS, within: (a, b) => skillPluginOf(a).localeCompare(skillPluginOf(b)) || byName(a, b), sorts: { name: byName, recent: byRecent } },
+    agent: { group: 'source', of: a => (a.source === 'plugin' ? 'plugin' : 'own'), groups: () => AGENT_ORIGINS, within: (a, b) => skillPluginOf(a).localeCompare(skillPluginOf(b)) || byName(a, b), sorts: { name: byName, recent: byRecent } },
+    rule: { group: 'loading', of: a => (a.meta && a.meta.paths ? 'scoped' : 'always'), groups: () => RULE_GROUPS, within: byName, sorts: { name: byName, recent: byRecent } },
+    hook: {
+      group: 'event',
+      of: eventOf,
+      groups: items => [...new Set(items.map(eventOf))].sort((x, y) => eventRank(x) - eventRank(y) || x.localeCompare(y)).map(e => [e, e, 'zap']),
+      within: byName,
+      sorts: { name: byName },
+    },
+    plugin: {
+      group: 'marketplace',
+      of: marketOf,
+      groups: items => [...new Set(items.map(marketOf))].sort().map(m => [m, m, 'package']),
+      within: byName,
+      sorts: { name: byName, state: (a, b) => Number(!!b.enabled) - Number(!!a.enabled) || byName(a, b) },
+    },
+  };
+  const listModes = kind => [LIST_VIEWS[kind].group, ...Object.keys(LIST_VIEWS[kind].sorts)];
+  const listMode = kind => (listModes(kind).includes(state.listViews[kind]) ? state.listViews[kind] : LIST_VIEWS[kind].group);
+  const isGrouped = kind => !!LIST_VIEWS[kind] && listMode(kind) === LIST_VIEWS[kind].group;
+  // Groups present in a list, each with its items in order: [[id, label, glyph], items][].
+  const groupItems = (kind, items, of = x => x) => {
+    const lv = LIST_VIEWS[kind];
+    return lv
+      .groups(items.map(of))
+      .map(g => [g, items.filter(x => lv.of(of(x)) === g[0]).sort((x, y) => lv.within(of(x), of(y)))])
+      .filter(g => g[1].length);
+  };
+  const sortList = (kind, items) => {
+    if (!LIST_VIEWS[kind]) return items;
+    if (!isGrouped(kind)) return items.sort(LIST_VIEWS[kind].sorts[listMode(kind)]);
+    return groupItems(kind, items).flatMap(g => g[1]);
   };
   const editable = () => state.detail && ['markdown', 'code', 'settings'].includes(state.detail.mode);
   const snapshot = d => JSON.stringify({ fields: d.fields, body: d.body });
@@ -138,38 +241,50 @@
 
   function renderCategories(list, view, q, nested) {
     for (const cat of view.categories) {
-      const items = cat.items.filter(a => matches(a, q));
-      if (cat.kind === 'mcp') items.sort(SORTS[state.mcpSort] || SORTS.name);
+      const lv = LIST_VIEWS[cat.kind];
+      const groups = lv && isGrouped(cat.kind) ? groupItems(cat.kind, cat.items.filter(a => matches(a, q))) : [];
+      const items = groups.length ? groups.flatMap(g => g[1]) : sortList(cat.kind, cat.items.filter(a => matches(a, q)));
       if (!items.length && (q || nested)) continue;
       const key = `${view.id}|${cat.kind}`;
       const collapsed = !state.expanded.has(key) && !q;
+      const current = !state.detail && state.page === 'kind' && state.kindPage && state.kindPage.kind === cat.kind && state.kindPage.origin === view.id;
       list.append(
         el(
           'div',
           {
-            className: `section-head${nested ? ' nested' : ''}`,
-            onclick: () => {
-              collapsed ? state.expanded.add(key) : state.expanded.delete(key);
-              persist();
-              render();
-            },
+            className: `section-head${nested ? ' nested' : ''}${current ? ' selected' : ''}`,
+            title: `Search and filter the ${cat.label.toLowerCase()}`,
+            onclick: () => showKindPage(cat.kind, view.id),
           },
-          icon(collapsed ? 'chevron-right' : 'chevron-down'),
+          el(
+            'span',
+            {
+              className: 'twistie',
+              title: collapsed ? 'Expand' : 'Collapse',
+              onclick: e => {
+                e.stopPropagation();
+                collapsed ? state.expanded.add(key) : state.expanded.delete(key);
+                persist();
+                render();
+              },
+            },
+            icon(collapsed ? 'chevron-right' : 'chevron-down')
+          ),
           el('span', { className: 'label' }, cat.label),
-          cat.kind === 'mcp' && !collapsed && items.length > 1
+          lv && !collapsed && items.length > 1 && (groups.length > 1 || !isGrouped(cat.kind))
             ? el(
                 'select',
                 {
                   className: 'sort',
-                  title: 'Sort by',
+                  title: 'View',
                   onclick: e => e.stopPropagation(),
                   onchange: e => {
-                    state.mcpSort = e.target.value;
+                    state.listViews[cat.kind] = e.target.value;
                     persist();
                     render();
                   },
                 },
-                Object.keys(SORTS).map(k => el('option', { value: k, selected: state.mcpSort === k }, `Sort: ${k}`))
+                listModes(cat.kind).map(k => el('option', { value: k, selected: listMode(cat.kind) === k }, `View: ${k}`))
               )
             : null,
           cat.kind === 'mcp' && view.id === 'global'
@@ -195,27 +310,79 @@
       );
       if (collapsed) continue;
       if (!items.length) list.append(el('div', { className: 'empty' }, 'None'));
-      for (const a of items) {
+      const row = a => {
         const selected = state.detail && state.detail.asset.id === a.id;
         const glyph = a.kind === 'plugin' ? (a.enabled ? 'pass-filled' : 'circle-large-outline') : a.kind === 'mcp' && SOURCES[a.source] ? SOURCES[a.source].icon : cat.icon;
         const off = (a.kind === 'plugin' || a.kind === 'mcp') && a.enabled === false;
-        const desc = a.kind === 'mcp' ? mcpDesc(a) : assetDesc(a);
-        list.append(
-          el(
-            'div',
-            {
-              className: `row${nested ? ' nested' : ''}${selected ? ' selected' : ''}${off ? ' disabled' : ''}`,
-              title: desc,
-              onclick: () => select(a.id),
-            },
-            icon(glyph),
-            el('span', { className: 'name' }, labelOf(a)),
-            desc ? el('span', { className: 'desc' }, desc) : null
-          )
+        const twin = twinText(a);
+        const desc = a.kind === 'mcp' ? [twin && `duplicate of ${twin}`, mcpDesc(a)].filter(Boolean).join(' · ') : a.kind === 'skill' ? skillByline(a) : assetDesc(a);
+        return el(
+          'div',
+          {
+            className: `row${nested ? ' nested' : ''}${selected ? ' selected' : ''}${off ? ' disabled' : ''}`,
+            title: a.kind === 'skill' ? [labelOf(a), a.description].filter(Boolean).join('\n') : desc,
+            onclick: () => select(a.id),
+          },
+          icon(glyph),
+          el('span', { className: 'name' }, groups.length > 1 && a.kind === 'plugin' ? rowName(a) : labelOf(a)),
+          desc ? el('span', { className: `desc${twin ? ' warn' : ''}` }, desc) : null
         );
+      };
+      if (groups.length < 2) {
+        list.append(...items.map(row));
+        continue;
+      }
+      // One collapsible header per group; a search opens every group so no hit hides.
+      for (const [[id, label, glyph], members] of groups) {
+        const foldKey = `${key}|${id}`;
+        const folded = state.foldedGroups.has(foldKey) && !q;
+        list.append(groupHead(`origin-head${nested ? ' nested' : ''}`, foldKey, folded, glyph, label, members.length, render));
+        if (!folded) list.append(...members.map(row));
       }
     }
   }
+
+  // A group header: the whole bar folds and unfolds its group, by click or by Enter and Space. `redraw` repaints
+  // the list, after which the header gets its focus back.
+  function groupHead(className, key, folded, glyph, label, count, redraw) {
+    const toggle = () => {
+      state.foldedGroups.has(key) ? state.foldedGroups.delete(key) : state.foldedGroups.add(key);
+      persist();
+      redraw();
+      const again = [...app.querySelectorAll('[data-group]')].find(n => n.dataset.group === key);
+      if (again) again.focus();
+    };
+    return el(
+      'div',
+      {
+        className,
+        role: 'button',
+        tabindex: '0',
+        'aria-expanded': folded ? 'false' : 'true',
+        'data-group': key,
+        onclick: toggle,
+        onkeydown: e => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          toggle();
+        },
+      },
+      icon(folded ? 'chevron-right' : 'chevron-down'),
+      icon(glyph),
+      el('span', { className: 'label' }, label),
+      el('span', { className: 'origin-n' }, count)
+    );
+  }
+
+  const DAY = 864e5;
+  const startOfDay = () => new Date(new Date().toDateString()).getTime();
+  // [id, label, glyph, test on a start time]; a session lands in the first group that takes it.
+  const SESSION_DAYS = [
+    ['today', 'Today', 'calendar', t => t >= startOfDay()],
+    ['yesterday', 'Yesterday', 'calendar', t => t >= startOfDay() - DAY],
+    ['week', 'Previous 7 days', 'calendar', t => t >= startOfDay() - 7 * DAY],
+    ['earlier', 'Earlier', 'history', () => true],
+  ];
 
   function renderSessionsNode(list, view, q) {
     const sessions = state.sessions[view.id];
@@ -257,18 +424,27 @@
       return;
     }
     const shown = state.allSessions.has(view.id) || q ? all : all.slice(0, 10);
-    for (const s of shown) {
+    const row = s => {
       const selected = !state.detail && state.page === 'session' && state.session && state.session.id === s.id;
-      list.append(
-        el(
-          'div',
-          { className: `row nested${selected ? ' selected' : ''}`, title: `${s.title}\n${sessionDesc(s)}`, onclick: () => showSession(view.id, s.id) },
-          sessionIcon(s),
-          el('span', { className: 'name' }, s.title),
-          el('span', { className: 'desc' }, sessionDesc(s))
-        )
+      return el(
+        'div',
+        { className: `row nested${selected ? ' selected' : ''}`, title: `${s.title}\n${sessionDesc(s)}`, onclick: () => showSession(view.id, s.id) },
+        sessionIcon(s),
+        el('span', { className: 'name' }, s.title),
+        el('span', { className: 'desc' }, sessionDesc(s))
       );
-    }
+    };
+    // Sessions fold by day, newest first, the way a chat history does.
+    const dayOf = s => SESSION_DAYS.find(d => d[3](s.start || 0))[0];
+    const groups = SESSION_DAYS.map(([id, label, glyph]) => [[id, label, glyph], shown.filter(s => dayOf(s) === id)]).filter(g => g[1].length);
+    if (groups.length < 2) list.append(...shown.map(row));
+    else
+      for (const [[id, label, glyph], members] of groups) {
+        const foldKey = `${key}|${id}`;
+        const folded = state.foldedGroups.has(foldKey) && !q;
+        list.append(groupHead('origin-head nested', foldKey, folded, glyph, label, members.length, render));
+        if (!folded) list.append(...members.map(row));
+      }
     if (all.length > shown.length)
       list.append(
         el(
@@ -477,14 +653,7 @@
           categories.map(c =>
             el(
               'div',
-              {
-                className: 'tile',
-                onclick: () => {
-                  state.expanded.add(`${global.id}|${c.kind}`);
-                  persist();
-                  if (c.items[0]) select(c.items[0].id);
-                },
-              },
+              Object.assign({ className: 'tile' }, pressable(() => showKindPage(c.kind, global.id))),
               el('span', { className: 'n' }, c.items.length),
               el('span', { className: 'l' }, icon(c.icon), c.label)
             )
@@ -541,9 +710,565 @@
     );
   }
 
+  // A div that acts as a button: clickable, focusable, and opened with Enter or Space.
+  const pressable = fn => ({
+    role: 'button',
+    tabindex: '0',
+    onclick: fn,
+    onkeydown: e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      fn();
+    },
+  });
+  const singular = cat => cat.label.replace(/s$/, '');
+  const kindLabel = kind => (categoryOf(kind) ? singular(categoryOf(kind)) : kind);
+  const fmtAgo = t => {
+    if (!t) return '-';
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m} min ago`;
+    if (m < 1440) return `${Math.round(m / 60)} h ago`;
+    if (m < 30 * 1440) return `${Math.round(m / 1440)} d ago`;
+    return new Date(t).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // Type pages: every element of one kind in a table, narrowed by a search, preset filters and facets.
+  const metaOf = a => a.meta || {};
+  const COPYABLE_KINDS = ['rule', 'agent', 'skill', 'command', 'outputStyle', 'workflow', 'hookScript'];
+  const RESTRICTED = ['restricted', 'Restricted tools', a => !!metaOf(a).tools];
+  const KIND_PRESETS = {
+    agent: [RESTRICTED, ['alltools', 'All tools', a => !metaOf(a).tools], ['plugin', 'From plugins', a => a.source === 'plugin']],
+    skill: [
+      RESTRICTED,
+      ['manual', 'Manual only', a => !!metaOf(a).manual],
+      ['files', 'With extra files', a => (a.files || []).length > 1],
+      ['plugin', 'From plugins', a => a.source === 'plugin'],
+      ['linked', 'Linked', a => !!a.link],
+    ],
+    command: [RESTRICTED, ['manual', 'Manual only', a => !!metaOf(a).manual]],
+    rule: [
+      ['always', 'Always loaded', a => !metaOf(a).paths],
+      ['scoped', 'Path-scoped', a => !!metaOf(a).paths],
+    ],
+    mcp: [
+      ['connected', 'Connected', a => a.enabled !== false && /^connected/i.test(a.status || '')],
+      ['auth', 'Needs sign-in', a => a.enabled !== false && /auth/i.test(a.status || '')],
+      ['failed', 'Failed', a => a.enabled !== false && /fail/i.test(a.status || '')],
+      ['off', 'Switched off', a => a.enabled === false || !!a.offIn],
+      ['twins', 'Duplicates', a => twinsOf(a).length > 0],
+    ],
+    plugin: [
+      ['on', 'Enabled', a => !!a.enabled],
+      ['disabled', 'Disabled', a => !a.enabled],
+    ],
+  };
+  const presetsFor = kind => [
+    ...(KIND_PRESETS[kind] || []),
+    ['week', 'Changed this week', a => Date.now() - (a.mtime || 0) < 7 * 864e5],
+    ...(COPYABLE_KINDS.includes(kind) ? [['copies', 'Has copies', a => (a.copies || []).length > 0]] : []),
+  ];
+  const pluginNameOf = a =>
+    a.kind === 'mcp' ? pluginOf(a) : a.source === 'plugin' && String(a.scope).startsWith('plugin:') ? a.scope.slice('plugin:'.length).split('@')[0] : '';
+  // [key, label, glyph, values of an entry, display name of a value]
+  const FACET_GROUPS = [
+    ['tool', 'Tool', 'tools', e => metaOf(e.a).tools || []],
+    ['model', 'Model', 'chip', e => [metaOf(e.a).model].filter(Boolean)],
+    ['color', 'Color', 'symbol-color', e => [metaOf(e.a).color].filter(Boolean)],
+    ['path', 'Path', 'filter', e => metaOf(e.a).paths || []],
+    ['source', 'Source', 'plug', e => (e.a.kind === 'mcp' && e.a.source ? [e.a.source] : []), v => (SOURCES[v] ? SOURCES[v].label : v)],
+    ['plugin', 'Plugin', 'extensions', e => [pluginNameOf(e.a)].filter(Boolean)],
+    ['market', 'Marketplace', 'package', e => (e.a.kind === 'plugin' && e.a.name.includes('@') ? [e.a.name.split('@').pop()] : [])],
+    ['event', 'Event', 'zap', e => (e.a.kind === 'hook' ? [e.a.name.split(' · ')[0]] : [])],
+    ['scope', 'Scope', 'repo', e => [e.v.id], v => (viewOf(v) ? viewOf(v).label : v)],
+  ];
+  const groupOf = key => FACET_GROUPS.find(g => g[0] === key);
+  const valueName = (g, v) => (g[4] ? g[4](v) : v);
+  const kindEntries = kind => state.views.flatMap(v => (v.categories.find(c => c.kind === kind) || { items: [] }).items.map(a => ({ a, v })));
+  const entryText = e =>
+    [labelOf(e.a), e.a.description, e.a.about, e.a.target, e.a.status, e.v.label, metaOf(e.a).model, ...(metaOf(e.a).tools || []), ...(metaOf(e.a).paths || [])]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+  const facetTestOf = (kind, f) => {
+    if (f.kind === 'preset') {
+      const p = presetsFor(kind).find(x => x[0] === f.value);
+      return e => !p || p[2](e.a);
+    }
+    const g = groupOf(f.kind);
+    return e => !g || g[3](e).includes(f.value);
+  };
+  // Facets of one group widen the list (Tool: Bash or Tool: Read), facets of different groups and presets narrow it.
+  const filterEntries = (kind, list, q, facets) => {
+    const groups = new Map();
+    for (const f of facets) {
+      const key = f.kind === 'preset' ? `preset:${f.value}` : f.kind;
+      groups.set(key, [...(groups.get(key) || []), facetTestOf(kind, f)]);
+    }
+    const tests = [...groups.values()];
+    return list.filter(e => tests.every(any => any.some(t => t(e))) && (!q || entryText(e).includes(q)));
+  };
+  const groupsIn = list => FACET_GROUPS.filter(g => (g[0] === 'scope' ? new Set(list.map(e => e.v.id)).size > 1 : list.some(e => g[3](e).length)));
+  const facetValues = (g, pool) => {
+    const counts = new Map();
+    for (const e of pool) for (const v of new Set(g[3](e))) counts.set(v, (counts.get(v) || 0) + 1);
+    return [...counts]
+      .map(([value, n]) => ({ kind: g[0], value, label: `${g[1]}: ${valueName(g, value)}`, n }))
+      .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+  };
+  // "tool: ba" lists the Tool values that contain "ba" instead of searching the text.
+  const groupQuery = (q, groups) => {
+    const m = /^([a-z ]+):\s*(.*)$/.exec(q);
+    const g = m && groups.find(x => x[1].toLowerCase() === m[1].trim());
+    return g ? { g, rest: m[2].trim() } : undefined;
+  };
+
+  function kindSuggestions(kind, entries, q, facets) {
+    const has = f => facets.some(x => x.kind === f.kind && x.value === f.value);
+    const groups = groupsIn(entries);
+    const pool = filterEntries(kind, entries, '', facets);
+    const gq = groupQuery(q, groups);
+    if (gq) return facetValues(gq.g, pool).filter(f => !has(f) && String(valueName(gq.g, f.value)).toLowerCase().includes(gq.rest));
+    const presets = presetsFor(kind)
+      .map(([value, label, test]) => ({ kind: 'preset', value, label, n: pool.filter(e => test(e.a)).length }))
+      .filter(f => f.n > 0 && !has(f) && (!q || f.label.toLowerCase().includes(q)));
+    const openers = groups.map(g => ({ kind: 'group', g, label: `${g[1]}:`, n: facetValues(g, pool).length })).filter(f => f.n > 0 && (!q || f.g[1].toLowerCase().startsWith(q)));
+    if (!q) return [...presets, ...openers];
+    const values = groups.flatMap(g => facetValues(g, pool)).filter(f => !has(f) && f.label.toLowerCase().includes(q));
+    const items = pool
+      .filter(e => labelOf(e.a).toLowerCase().includes(q))
+      .slice(0, 5)
+      .map(e => ({ kind: 'item', e, label: labelOf(e.a) }));
+    return [...openers, ...presets.slice(0, 3), ...values.slice(0, 6), ...items];
+  }
+
+  const glyphOf = a => {
+    const cat = categoryOf(a.kind);
+    return a.kind === 'plugin' ? (a.enabled ? 'pass-filled' : 'circle-large-outline') : a.kind === 'mcp' && SOURCES[a.source] ? SOURCES[a.source].icon : cat ? cat.icon : 'file';
+  };
+  const rowName = a => (a.kind === 'plugin' ? a.name.split('@')[0] : labelOf(a));
+  const descOf = a =>
+    a.kind === 'mcp' ? a.target || a.description : a.kind === 'plugin' ? (a.name.includes('@') ? `from ${a.name.split('@').pop()}` : '') : a.description;
+  const toolsText = a => (metaOf(a).tools ? plural(metaOf(a).tools.length, 'tool') : 'all tools');
+  // Facts per kind as table columns: [header, width in px, value].
+  const KIND_FACTS = {
+    agent: [
+      ['Model', 76, a => metaOf(a).model || 'inherit'],
+      ['Tools', 80, toolsText],
+    ],
+    skill: [
+      ['Tools', 80, toolsText],
+      ['Files', 48, a => String(Math.max(1, (a.files || []).length))],
+      ['Origin', 150, a => (a.source === 'plugin' ? pluginLabel(skillPluginOf(a)) : a.link ? `linked from ${linkName(a.link)}` : 'own')],
+    ],
+    command: [['Tools', 80, toolsText]],
+    rule: [['Loads', 170, a => (metaOf(a).paths ? metaOf(a).paths.join(', ') : 'always')]],
+    mcp: [
+      ['Source', 150, sourceName],
+      ['Status', 150, a => (a.enabled === false ? 'off' : a.status || '-')],
+    ],
+    plugin: [
+      ['Version', 84, a => a.description.split(' · ')[1] || '-'],
+      ['State', 72, a => (a.enabled ? 'enabled' : 'disabled')],
+    ],
+    settings: [['Keys', 52, a => a.description.replace(/ keys$/, '')]],
+  };
+  const CHANGED = ['Changed', 92, a => fmtAgo(a.mtime)];
+
+  // One grid for every table on the main pages. A column: { head, track, cell(row), title(row), num, muted, wide, cls };
+  // `wide` columns drop out when the panel is narrow. A row with `open` is a button.
+  function gridTable(cols, rows, label) {
+    const cellClass = c => [c.cls, c.num ? 'at-fact' : 'at-cell', c.muted ? 'at-muted' : '', c.wide ? 'at-wide' : ''].filter(Boolean).join(' ');
+    const table = el(
+      'div',
+      { className: 'asset-table', role: 'table', 'aria-label': label },
+      el('div', { className: 'at-row at-head', role: 'row' }, cols.map(c => el('span', { className: cellClass(c), role: 'columnheader' }, c.head))),
+      rows.map(r =>
+        el(
+          'div',
+          Object.assign({ className: ['at-row', r.open ? '' : 'static', r.className].filter(Boolean).join(' ') }, r.open ? pressable(r.open) : {}, { role: 'row' }),
+          cols.map(c => el('span', { className: cellClass(c), role: 'cell', title: (c.title && c.title(r)) || undefined }, c.cell(r)))
+        )
+      )
+    );
+    table.style.setProperty('--at-cols', cols.map(c => c.track).join(' '));
+    table.style.setProperty('--at-cols-narrow', cols.filter(c => !c.wide).map(c => c.track).join(' '));
+    return table;
+  }
+  const factCol = ([head, width, value]) => {
+    const text = e => String(value(e.a, e.v));
+    return { head, track: `minmax(0, ${width}px)`, num: true, cell: text, title: e => (text(e).length * 7 > width ? text(e) : '') };
+  };
+
+  function assetTable(entries, facts, q, label, showScope = new Set(entries.map(e => e.v.id)).size > 1) {
+    const cols = [
+      {
+        head: 'Name',
+        track: 'minmax(140px, 1fr)',
+        cls: 'at-name',
+        cell: e => {
+          const color = AGENT_COLORS.includes(metaOf(e.a).color) ? metaOf(e.a).color : '';
+          return [icon(glyphOf(e.a)), color ? el('span', { className: `swatch ac-${color}` }) : null, el('span', { className: 'at-label' }, highlight(rowName(e.a), q))];
+        },
+      },
+      { head: 'Description', track: 'minmax(0, 2fr)', muted: true, wide: true, cell: e => highlight(descOf(e.a) || '', q), title: e => descOf(e.a) },
+      ...[...facts, CHANGED].map(factCol),
+    ];
+    if (showScope) cols.push(factCol(['Scope', 130, (a, v) => v.label]));
+    return gridTable(cols, entries.map(e => Object.assign({ open: () => select(e.a.id), className: e.a.enabled === false ? 'disabled' : '' }, e)), label);
+  }
+
+  const showKindPage = (kind, scope) => {
+    const view = viewOf(scope);
+    state.page = 'kind';
+    state.repo = undefined;
+    state.kindPage = { kind, origin: scope, query: '', facets: view ? [{ kind: 'scope', value: view.id, label: `Scope: ${view.label}` }] : [], open: false, active: 0, focus: true };
+    hideHover();
+    if (state.detail) select(undefined);
+    else render();
+  };
+
+  function renderKindPage() {
+    const p = state.kindPage;
+    const cat = categoryOf(p.kind) || { kind: p.kind, label: p.kind, icon: 'file' };
+    const origin = viewOf(p.origin);
+    const lower = cat.label.toLowerCase();
+    const facts = KIND_FACTS[p.kind] || [];
+    let entries = kindEntries(p.kind);
+    const results = el('div', { className: 'kind-results' });
+    const filters = el('div', { className: 'filter-bar' });
+    const suggest = el('div', { className: 'suggest', role: 'listbox', id: 'kind-suggest', hidden: true });
+    const hintGroup = groupsIn(entries).find(g => g[0] !== 'scope');
+    const input = el('input', {
+      type: 'search',
+      id: 'kind-search',
+      placeholder: `Search ${lower} by name or description${hintGroup ? `, or type ${hintGroup[1].toLowerCase()}: to filter` : ''}`,
+      value: p.query,
+      autocomplete: 'off',
+      spellcheck: 'false',
+      role: 'combobox',
+      'aria-label': `Search ${lower}`,
+      'aria-expanded': 'false',
+      'aria-controls': 'kind-suggest',
+      'aria-autocomplete': 'list',
+    });
+    let items = [];
+    const q = () => p.query.trim().toLowerCase();
+    const textQ = () => (groupQuery(q(), groupsIn(entries)) ? '' : q());
+    const same = (a, b) => a.kind === b.kind && a.value === b.value;
+    const has = f => p.facets.some(x => same(x, f));
+    const toggle = f => {
+      p.facets = has(f) ? p.facets.filter(x => !same(x, f)) : [...p.facets, { kind: f.kind, value: f.value, label: f.label }];
+      update();
+    };
+    const openGroup = g => {
+      input.value = `${g[1].toLowerCase()}: `;
+      p.query = input.value;
+      p.open = true;
+      p.active = 0;
+      input.focus();
+      update();
+    };
+    const drawResults = () => {
+      const hits = filterEntries(p.kind, entries, textQ(), p.facets);
+      const cols = p.kind === 'mcp' && hits.some(e => twinsOf(e.a).length) ? [...facts, ['Duplicate of', 170, a => twinText(a) || '-']] : facts;
+      // Lists with origins (MCP servers, skills) get one table per origin, in the sidebar's order.
+      const lv = LIST_VIEWS[p.kind];
+      const groups = lv ? lv.origins.map(o => [o, hits.filter(e => lv.origin(e.a) === o[0])]).filter(g => g[1].length) : [];
+      const scoped = new Set(hits.map(e => e.v.id)).size > 1;
+      const body =
+        groups.length > 1
+          ? groups.map(([o, list]) =>
+              el('div', { className: 'origin-section' }, el('div', { className: 'origin-label' }, icon(o[2]), el('span', { className: 'label' }, o[1]), el('span', { className: 'origin-n' }, list.length)), assetTable(list, cols, textQ(), o[1], scoped))
+            )
+          : [assetTable(hits, cols, textQ(), cat.label, scoped)];
+      results.replaceChildren(
+        ...[
+          el('div', { className: 'group-label' }, hits.length === entries.length ? `${entries.length} ${lower}` : `${hits.length} of ${entries.length} ${lower}`),
+          hits.length ? body : el('div', { className: 'empty flush' }, entries.length ? 'Nothing matches. Press Esc to clear the search, then the filters.' : `No ${lower} yet.`),
+        ].flat()
+      );
+    };
+    const drawFilters = () => {
+      const chips = p.facets
+        .filter(f => f.kind !== 'preset')
+        .map(f =>
+          el(
+            'button',
+            {
+              className: 'chip',
+              title: `Remove the filter ${f.label}`,
+              onclick: () => {
+                toggle(f);
+                input.focus();
+              },
+            },
+            icon((groupOf(f.kind) || [])[2] || 'filter'),
+            el('span', {}, f.label),
+            icon('close')
+          )
+        );
+      const presets = presetsFor(p.kind).map(([value, label, test]) => {
+        const f = { kind: 'preset', value, label };
+        const on = has(f);
+        const n = filterEntries(p.kind, entries, textQ(), p.facets.filter(x => !same(x, f))).filter(e => test(e.a)).length;
+        return on || n
+          ? el('button', { className: `preset${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: () => toggle(f) }, el('span', {}, label), el('span', { className: 'preset-n' }, n))
+          : null;
+      });
+      const openers = groupsIn(entries).map(g => el('button', { className: 'filter-add', 'aria-label': `Filter by ${g[1].toLowerCase()}`, onclick: () => openGroup(g) }, icon('add'), g[1]));
+      filters.replaceChildren(...[chips, presets, openers.length ? el('span', { className: 'filter-sep', 'aria-hidden': 'true' }) : null, openers].flat().filter(Boolean));
+    };
+    const drawSuggest = () => {
+      items = kindSuggestions(p.kind, entries, q(), p.facets);
+      if (p.active >= items.length) p.active = 0;
+      suggest.replaceChildren(
+        ...items.map((it, i) =>
+          el(
+            'div',
+            {
+              className: `suggest-item${i === p.active ? ' active' : ''}`,
+              role: 'option',
+              id: `kind-suggest-${i}`,
+              'aria-selected': i === p.active ? 'true' : 'false',
+              onmousedown: e => {
+                e.preventDefault();
+                pick(it);
+              },
+            },
+            icon(it.kind === 'item' ? glyphOf(it.e.a) : it.kind === 'group' ? it.g[2] : (groupOf(it.kind) || [])[2] || 'filter'),
+            el('span', { className: 'name' }, it.kind === 'item' ? highlight(it.label, q()) : it.label),
+            el('span', { className: 'desc' }, it.kind === 'item' ? 'Open' : it.kind === 'group' ? `${it.n} ${it.n === 1 ? 'value' : 'values'}` : `${it.n} ${it.n === 1 ? singular(cat).toLowerCase() : lower}`)
+          )
+        )
+      );
+      const show = p.open && items.length > 0;
+      suggest.hidden = !show;
+      input.setAttribute('aria-expanded', show ? 'true' : 'false');
+      if (show) input.setAttribute('aria-activedescendant', `kind-suggest-${p.active}`);
+      else input.removeAttribute('aria-activedescendant');
+    };
+    const update = () => {
+      drawFilters();
+      drawResults();
+      drawSuggest();
+    };
+    const pick = it => {
+      if (it.kind === 'item') {
+        select(it.e.a.id);
+        return;
+      }
+      if (it.kind === 'group') {
+        openGroup(it.g);
+        return;
+      }
+      p.facets = [...p.facets, { kind: it.kind, value: it.value, label: it.label }];
+      p.query = '';
+      input.value = '';
+      p.active = 0;
+      update();
+    };
+    input.addEventListener('input', () => {
+      p.query = input.value;
+      p.open = true;
+      p.active = 0;
+      update();
+    });
+    input.addEventListener('focus', () => {
+      if (p.quiet) {
+        p.quiet = false;
+        return;
+      }
+      p.open = true;
+      drawSuggest();
+    });
+    input.addEventListener('blur', () => {
+      p.open = false;
+      drawSuggest();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (p.query) {
+          p.query = '';
+          input.value = '';
+        } else p.facets = [];
+        p.active = 0;
+        update();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        p.open = true;
+        if (items.length) p.active = (p.active + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+        drawSuggest();
+        const active = suggest.querySelector('.suggest-item.active');
+        if (active) active.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        if (p.open && items[p.active]) {
+          e.preventDefault();
+          pick(items[p.active]);
+        }
+      } else if (e.key === 'Backspace' && !input.value && p.facets.length) {
+        p.facets = p.facets.slice(0, -1);
+        update();
+      }
+    });
+    p.refresh = () => {
+      entries = kindEntries(p.kind);
+      update();
+    };
+    update();
+    if (p.focus) {
+      p.focus = false;
+      p.quiet = true;
+      requestAnimationFrame(() => input.focus());
+    }
+    const inOrigin = entries.filter(e => e.v.id === p.origin).length;
+    const scopes = new Set(entries.map(e => e.v.id)).size;
+    const back = origin && origin.id !== 'global' ? iconBtn('arrow-left', `Back to ${origin.label}`, () => showRepo(origin.id)) : iconBtn('arrow-left', 'Back to the overview', () => showRepo(undefined));
+    const create = cat.creatable
+      ? iconBtn('add', `New ${singular(cat)}${origin ? ` in ${origin.label}` : ''}`, () => command('create', { kind: p.kind, scope: p.origin }))
+      : p.kind === 'mcp'
+        ? iconBtn('add', 'Add MCP Server...', () => command('addMcp', { scope: p.origin }))
+        : p.kind === 'plugin'
+          ? iconBtn('add', 'Install Plugin...', () => command('installPlugin', { scope: p.origin }))
+          : null;
+    return el(
+      'section',
+      { className: 'main' },
+      pageHead(cat.icon, cat.label, [origin ? `${inOrigin} in ${origin.label}` : '', `${entries.length} across ${plural(scopes, 'scope')}`].filter(Boolean).join(' · '), back, create),
+      el('div', { className: 'main-body', onscroll: hideHover }, el('div', { className: 'kind-search' }, el('div', { className: 'combo' }, icon('search'), input, suggest), filters), results)
+    );
+  }
+
+  // Repo page: three tabs, the way the session page splits its delegation views.
+  const REPO_TABS = [
+    ['overview', 'Overview', 'dashboard', 'What the repo adds to the harness, how much of it every session loads, and what changed last.'],
+    ['effective', 'Effective harness', 'layers', 'What a session here loads: memory with its imports, rules, plugins and hooks.'],
+    ['sessions', 'Sessions', 'history', 'Every Claude Code session that ran in this repo.'],
+  ];
+
+  function tabBar(tabs, current, pick, label) {
+    const bar = el('div', { className: 'view-tabs', role: 'tablist', 'aria-label': label });
+    bar.append(
+      ...tabs.map(([id, text, glyph, about, count]) => {
+        const on = id === current;
+        const tip = target => {
+          const r = target.getBoundingClientRect();
+          placeCard(`tab:${id}`, () => tabTip(text, glyph, about), { x: r.left - 14, y: r.bottom - 6 });
+        };
+        return el(
+          'button',
+          {
+            className: `view-tab${on ? ' active' : ''}`,
+            role: 'tab',
+            'aria-selected': on ? 'true' : 'false',
+            tabindex: on ? '0' : '-1',
+            'aria-description': about,
+            onclick: () => pick(id),
+            onmouseenter: e => tip(e.currentTarget),
+            onmouseleave: hideHover,
+            onfocus: e => tip(e.currentTarget),
+            onblur: hideHover,
+          },
+          icon(glyph),
+          el('span', {}, text),
+          count === undefined ? null : el('span', { className: 'tab-count' }, count)
+        );
+      })
+    );
+    bar.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const i = tabs.findIndex(t => t[0] === current);
+      pick(tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length][0], true);
+    });
+    return bar;
+  }
+
+  const memoryCount = node => (node.exists ? 1 : 0) + node.imports.reduce((n, c) => n + memoryCount(c), 0);
+
+  function repoOverview(view, pick) {
+    const sessions = state.sessions[view.id];
+    const eff = state.effective[view.id];
+    if (eff === undefined) {
+      state.effective[view.id] = null;
+      vscode.postMessage({ type: 'effective', scope: view.id });
+    }
+    const entries = view.categories.flatMap(c => c.items.map(a => ({ a, v: view })));
+    const copies = entries.filter(e => (e.a.copies || []).length);
+    const identical = copies.filter(e => e.a.copies.some(c => c.same)).length;
+    const latest = sessions && sessions.length ? Math.max(...sessions.map(s => s.start || 0)) : 0;
+    const launched = sessions ? sessions.reduce((n, s) => n + (s.agents || 0), 0) : 0;
+    const delegating = sessions ? sessions.filter(s => s.agents > 0).length : 0;
+    const e = eff && eff.effective;
+    const memory = e ? e.memory.reduce((n, m) => n + memoryCount(m), 0) : 0;
+    const always = e ? e.rules.filter(r => r.always).length : 0;
+    const kpi = (n, label, glyph, note, open) =>
+      el(
+        'div',
+        Object.assign({ className: `tile${open ? '' : ' static'}` }, open ? pressable(open) : {}),
+        el('span', { className: 'n' }, n),
+        el('span', { className: 'l' }, icon(glyph), label),
+        el('span', { className: 'kpi-note' }, note)
+      );
+    const recent = [...entries].sort((x, y) => y.a.mtime - x.a.mtime).slice(0, 10);
+    return [
+      el(
+        'div',
+        { className: 'kpis' },
+        kpi(sessions ? String(sessions.length) : '...', 'Sessions', 'history', sessions ? (latest ? `last ${fmtAgo(latest)}` : 'none yet') : 'reading...', () => pick('sessions')),
+        kpi(sessions ? String(launched) : '...', 'Agents launched', 'type-hierarchy-sub', sessions ? `in ${delegating} of ${plural(sessions.length, 'session')}` : 'reading...'),
+        kpi(e ? String(memory + always) : '...', 'Always loaded', 'layers', e ? `${plural(memory, 'memory file')}, ${plural(always, 'rule')}` : 'reading...', () => pick('effective')),
+        kpi(String(copies.length), 'Copies', 'files', copies.length ? `${identical} identical to another scope` : 'nothing shared with another scope')
+      ),
+      el(
+        'div',
+        { className: 'recent' },
+        el('div', { className: 'group-label' }, 'Harness'),
+        el(
+          'div',
+          { className: 'overview compact' },
+          view.categories.map(c =>
+            el(
+              'div',
+              Object.assign({ className: `tile${c.items.length ? '' : ' zero'}`, title: `Search and filter the ${c.label.toLowerCase()} of ${view.label}` }, pressable(() => showKindPage(c.kind, view.id))),
+              el('span', { className: 'n' }, c.items.length),
+              el('span', { className: 'l' }, icon(c.icon), c.label)
+            )
+          )
+        )
+      ),
+      recent.length
+        ? el('div', { className: 'recent' }, el('div', { className: 'group-label' }, 'Recently changed'), assetTable(recent, [['Type', 96, a => kindLabel(a.kind)]], '', 'Recently changed'))
+        : null,
+      std() ? renderStandard(view) : null,
+    ];
+  }
+
+  function repoSessions(view) {
+    return [
+      el('div', { className: 'toolbar' }, el('button', { className: 'secondary', onclick: () => showSessionsPage(view.id) }, icon('search'), 'Search and filter')),
+      renderSessionList(view),
+    ];
+  }
+
   function renderRepo(view) {
-    const items = view.categories.flatMap(c => c.items.map(a => Object.assign({ icon: c.icon }, a)));
-    const recent = items.sort((a, b) => b.mtime - a.mtime).slice(0, 12);
+    const tab = REPO_TABS.some(t => t[0] === state.repoTab) ? state.repoTab : 'overview';
+    const sessions = state.sessions[view.id];
+    if (sessions === undefined) {
+      state.sessions[view.id] = null;
+      vscode.postMessage({ type: 'sessions', scope: view.id });
+    }
+    const pick = (id, focus) => {
+      state.repoTab = id;
+      persist();
+      hideHover();
+      renderMain();
+      const active = focus && app.querySelector('.main .view-tab.active');
+      if (active) active.focus();
+    };
+    const tabs = REPO_TABS.map(t => (t[0] === 'sessions' && sessions ? [...t, sessions.length] : t));
     return el(
       'section',
       { className: 'main' },
@@ -568,47 +1293,9 @@
       ),
       el(
         'div',
-        { className: 'main-body' },
-        el(
-          'div',
-          { className: 'overview' },
-          view.categories.map(c =>
-            el(
-              'div',
-              {
-                className: 'tile',
-                onclick: () => {
-                  state.expanded.add(`${view.id}|${c.kind}`);
-                  state.openRepos.add(view.id);
-                  persist();
-                  if (c.items[0]) select(c.items[0].id);
-                  else render();
-                },
-              },
-              el('span', { className: 'n' }, c.items.length),
-              el('span', { className: 'l' }, icon(c.icon), c.label)
-            )
-          )
-        ),
-        recent.length
-          ? el(
-              'div',
-              { className: 'recent' },
-              el('div', { className: 'group-label' }, 'Recently changed'),
-              recent.map(a =>
-                el(
-                  'div',
-                  { className: 'row', onclick: () => select(a.id) },
-                  icon(a.icon),
-                  el('span', { className: 'name' }, a.name),
-                  el('span', { className: 'desc' }, new Date(a.mtime).toLocaleString())
-                )
-              )
-            )
-          : null,
-        renderSessionList(view),
-        std() ? renderStandard(view) : null,
-        renderEffective(view)
+        { className: 'main-body', onscroll: hideHover },
+        tabBar(tabs, tab, pick, `${view.label} views`),
+        tab === 'effective' ? renderEffective(view) : tab === 'sessions' ? repoSessions(view) : repoOverview(view, pick)
       )
     );
   }
@@ -637,18 +1324,13 @@
     );
   }
 
-  function memoryRows(node, depth) {
-    return [
-      el(
-        'div',
-        { className: `row indent-${Math.min(depth, 5)}`, title: node.file, onclick: node.exists ? () => openAt(node.file) : undefined },
-        icon(depth ? 'arrow-small-right' : 'markdown'),
-        el('span', { className: 'name' }, node.label),
-        el('span', { className: 'desc' }, node.exists ? (depth ? 'imported' : node.file) : 'not found')
-      ),
-      ...node.imports.flatMap(n => memoryRows(n, depth + 1)),
-    ];
-  }
+  const memoryList = (node, depth) => [{ node, depth }, ...node.imports.flatMap(n => memoryList(n, depth + 1))];
+  const indent = depth => {
+    const node = el('span', { className: 'at-indent', 'aria-hidden': 'true' });
+    node.style.setProperty('--depth', depth);
+    return node;
+  };
+  const section = (label, body) => el('div', { className: 'recent' }, el('div', { className: 'group-label' }, label), body);
 
   function renderEffective(view) {
     const eff = state.effective[view.id];
@@ -658,58 +1340,56 @@
     }
     if (!eff) return el('div', { className: 'empty flush' }, 'Reading what a session here loads...');
     const e = eff.effective;
-    const plugin = p =>
+    const name = (glyph, text, depth) => ({ head: 'Name', track: 'minmax(160px, 1.2fr)', cls: 'at-name', cell: r => [indent(depth ? depth(r) : 0), icon(glyph(r)), el('span', { className: 'at-label' }, text(r))] });
+    const switchCol = (head, key) => ({ head, track: '64px', num: true, cell: p => (p[key] === undefined ? '-' : p[key] ? 'on' : 'off') });
+    const memory = e.memory.flatMap(n => memoryList(n, 0));
+    const memoryTable = gridTable(
       [
-        ['user', p.user],
-        ['project', p.project],
-        ['local', p.local],
-      ]
-        .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => `${k} ${v ? 'on' : 'off'}`)
-        .join(' · ');
-    return el(
-      'div',
-      { className: 'effective' },
-      el('div', { className: 'group-label' }, 'Effective harness: what a session here loads'),
-      el('div', { className: 'sub-label' }, 'Memory, imports expanded'),
-      e.memory.length ? e.memory.flatMap(n => memoryRows(n, 0)) : el('div', { className: 'empty flush' }, 'No CLAUDE.md'),
-      el('div', { className: 'sub-label' }, `Rules (${e.rules.length})`),
-      e.rules.length
-        ? e.rules.map(r =>
-            el(
-              'div',
-              { className: 'row', title: r.file, onclick: () => openAt(r.file) },
-              icon(r.always ? 'law' : r.total ? 'filter' : 'warning'),
-              el('span', { className: 'name' }, `${r.scope === view.label ? '' : `${r.scope} · `}${r.name}`),
-              el('span', { className: 'desc' }, r.always ? 'always loaded' : `${r.globs.map(g => g.glob).join(', ')} · ${r.total} ${r.total === 1 ? 'file' : 'files'}${e.capped ? '+' : ''}`)
-            )
-          )
-        : el('div', { className: 'empty flush' }, 'No rules'),
-      el('div', { className: 'sub-label' }, `Plugins (${e.plugins.filter(p => p.enabled).length} on)`),
-      e.plugins.length
-        ? e.plugins.map(p =>
-            el(
-              'div',
-              { className: `row${p.enabled ? '' : ' disabled'}` },
-              icon(p.enabled ? 'pass-filled' : 'circle-large-outline'),
-              el('span', { className: 'name' }, p.key),
-              el('span', { className: `desc${p.duplicate ? ' warn' : ''}` }, [plugin(p), p.duplicate ? 'duplicate: already on for the user' : ''].filter(Boolean).join(' · '))
-            )
-          )
-        : el('div', { className: 'empty flush' }, 'No plugins'),
-      el('div', { className: 'sub-label' }, `Hooks (${e.hooks.length})`),
-      e.hooks.length
-        ? e.hooks.map(h =>
-            el(
-              'div',
-              { className: 'row', title: h.command },
-              icon(h.event === 'mod' ? 'extensions' : 'zap'),
-              el('span', { className: 'name' }, h.matcher ? `${h.event} · ${h.matcher}` : h.event),
-              el('span', { className: 'desc' }, `${h.command} · ${h.source}`)
-            )
-          )
-        : el('div', { className: 'empty flush' }, 'No hooks')
+        name(r => (r.depth ? 'arrow-small-right' : 'markdown'), r => r.node.label, r => r.depth),
+        { head: 'File', track: 'minmax(0, 2fr)', muted: true, wide: true, cell: r => r.node.file, title: r => r.node.file },
+        { head: 'Loaded as', track: '96px', num: true, cell: r => (!r.node.exists ? 'not found' : r.depth ? 'import' : 'memory') },
+      ],
+      memory.map(r => Object.assign({ open: r.node.exists ? () => openAt(r.node.file) : undefined, className: r.node.exists ? '' : 'disabled' }, r)),
+      'Memory'
     );
+    const rulesTable = gridTable(
+      [
+        name(r => (r.always ? 'law' : r.total ? 'filter' : 'warning'), r => r.name),
+        { head: 'Loads', track: 'minmax(0, 2fr)', muted: true, wide: true, cell: r => (r.always ? 'always' : r.globs.map(g => g.glob).join(', ')), title: r => r.globs.map(g => g.glob).join('\n') },
+        { head: 'Files', track: '72px', num: true, cell: r => (r.always ? '-' : `${r.total}${e.capped ? '+' : ''}`) },
+        { head: 'Scope', track: '120px', num: true, cell: r => r.scope },
+      ],
+      e.rules.map(r => Object.assign({ open: () => openAt(r.file) }, r)),
+      'Rules'
+    );
+    const pluginsTable = gridTable(
+      [
+        name(p => (p.enabled ? 'pass-filled' : 'circle-large-outline'), p => p.key.split('@')[0]),
+        { head: 'Marketplace', track: 'minmax(0, 1fr)', muted: true, wide: true, cell: p => p.key.split('@')[1] || '' },
+        switchCol('User', 'user'),
+        switchCol('Project', 'project'),
+        switchCol('Local', 'local'),
+        e.plugins.some(p => p.duplicate) ? { head: 'Note', track: '160px', num: true, cls: 'warn', cell: p => (p.duplicate ? 'already on for the user' : '') } : null,
+      ].filter(Boolean),
+      e.plugins.map(p => Object.assign({ className: p.enabled ? '' : 'disabled' }, p)),
+      'Plugins'
+    );
+    const hooksTable = gridTable(
+      [
+        name(h => (h.event === 'mod' ? 'extensions' : 'zap'), h => (h.matcher ? `${h.event} · ${h.matcher}` : h.event)),
+        { head: 'Command', track: 'minmax(0, 2fr)', muted: true, wide: true, cell: h => h.command, title: h => h.command },
+        { head: 'Source', track: '160px', num: true, cell: h => h.source, title: h => h.source },
+      ],
+      e.hooks,
+      'Hooks'
+    );
+    const on = e.plugins.filter(p => p.enabled).length;
+    return [
+      section(`Memory (${memory.filter(r => r.node.exists).length})`, memory.length ? memoryTable : el('div', { className: 'empty flush' }, 'No CLAUDE.md')),
+      section(`Rules (${e.rules.length})`, e.rules.length ? rulesTable : el('div', { className: 'empty flush' }, 'No rules')),
+      section(`Plugins (${on} on)`, e.plugins.length ? pluginsTable : el('div', { className: 'empty flush' }, 'No plugins')),
+      section(`Hooks (${e.hooks.length})`, e.hooks.length ? hooksTable : el('div', { className: 'empty flush' }, 'No hooks')),
+    ];
   }
 
   function renderRuleInfo(a) {
@@ -1080,6 +1760,9 @@
       el(
         'div',
         { className: 'toolbar' },
+        state.page === 'kind' && state.kindPage
+          ? iconBtn('arrow-left', `Back to ${categoryOf(state.kindPage.kind) ? categoryOf(state.kindPage.kind).label : 'the list'}`, () => select(undefined))
+          : null,
         d.asset.kind === 'mcp' && d.asset.source !== 'claude.ai' && d.asset.source !== 'plugin' ? iconBtn('copy', 'Copy as claude mcp add command', () => command('copyMcpAdd', { id: d.asset.id })) : null,
         canRename ? iconBtn('edit', 'Rename', () => command('rename', { id: d.asset.id })) : null,
         canRename ? iconBtn('copy', 'Duplicate', () => command('duplicate', { id: d.asset.id })) : null,
@@ -1508,8 +2191,17 @@
         ? el('div', { className: 'empty flush' }, 'Reading the sessions...')
         : !list.length
           ? el('div', { className: 'empty flush' }, 'No Claude Code session ran in this repo yet.')
-          : shown.map(s =>
-              el('div', { className: 'row', title: s.title, onclick: () => showSession(view.id, s.id) }, sessionIcon(s), el('span', { className: 'name' }, s.title), el('span', { className: 'desc' }, sessionDesc(s)))
+          : gridTable(
+              [
+                { head: 'Session', track: 'minmax(180px, 3fr)', cls: 'at-name', cell: s => [sessionIcon(s), el('span', { className: 'at-label' }, s.title)], title: s => s.title },
+                { head: 'Branch', track: 'minmax(0, 1fr)', muted: true, wide: true, cell: s => s.branch || '' },
+                { head: 'Started', track: '120px', num: true, cell: s => (s.start ? fmtDate(s.start) : '-') },
+                { head: 'Duration', track: '76px', num: true, cell: s => (s.start ? fmtDur(s.end - s.start) : '-') },
+                { head: 'Agents', track: '60px', num: true, cell: s => String(s.agents || 0) },
+                { head: 'State', track: '84px', num: true, cell: s => s.live || (s.headless ? 'headless' : s.children && s.children.length ? `${s.children.length} headless` : '') },
+              ],
+              shown.map(s => Object.assign({ open: () => showSession(view.id, s.id) }, s)),
+              'Sessions'
             ),
       list && list.length > shown.length
         ? el(
@@ -3220,6 +3912,8 @@
           ? renderSession()
         : state.page === 'sessions' && state.sessionsPage
           ? renderSessionsPage()
+        : state.page === 'kind' && state.kindPage
+          ? renderKindPage()
         : state.page === 'marketplaces'
           ? renderMarkets()
           : state.page === 'init' && state.init
@@ -3257,6 +3951,7 @@
         state.fleetTimer = setTimeout(() => vscode.postMessage({ type: 'fleet' }), 400);
       }
       if (current && !state.detail && (state.repo || state.page === 'fleet')) renderMain();
+      if (current && !state.detail && state.page === 'kind' && state.kindPage && state.kindPage.refresh) state.kindPage.refresh();
     } else if (m.type === 'page') {
       if (m.page === 'session' && m.repo && m.session) showSession(m.repo, m.session);
       else if (m.repo) {

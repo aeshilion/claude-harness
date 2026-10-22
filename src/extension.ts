@@ -150,6 +150,13 @@ export function activate(context: vscode.ExtensionContext): void {
           globalAgents.items.push({ ...a, source: 'plugin', description: [`plugin ${p.id.slice('plugin:'.length).split('@')[0]}`, a.description].filter(Boolean).join(' · ') });
       globalAgents.items.sort((x, y) => x.name.localeCompare(y.name));
     }
+    // Their skills load in every session too, so they join the global Skills list the same way.
+    const globalSkills = views[0].categories.find(c => c.kind === 'skill');
+    if (globalSkills) {
+      for (const p of plugins.filter(v => enabledPlugins.has(v.id.slice('plugin:'.length))))
+        for (const a of p.categories.find(c => c.kind === 'skill')?.items ?? []) globalSkills.items.push({ ...a, source: 'plugin' });
+      globalSkills.items.sort((x, y) => x.name.localeCompare(y.name));
+    }
     for (const a of views.flatMap(v => v.categories.find(c => c.kind === 'plugin')?.items ?? [])) if (pluginIsMod(global.root, a.name)) a.description += ' · mod';
     tree.setCategories(views[0].categories, views.slice(1));
     HarnessPanel.update();

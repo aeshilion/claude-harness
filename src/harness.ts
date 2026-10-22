@@ -86,6 +86,18 @@ export interface Asset {
   folders?: number;
   version?: string;
   copies?: Copy[];
+  meta?: AssetMeta;
+  /** Where a symlinked skill folder points. */
+  link?: string;
+}
+
+/** Frontmatter facts the type pages filter on. */
+export interface AssetMeta {
+  tools?: string[];
+  model?: string;
+  color?: string;
+  paths?: string[];
+  manual?: boolean;
 }
 
 export interface Copy {
@@ -434,12 +446,26 @@ export function versionOf(data: Record<string, unknown>): string | undefined {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
 }
 
+export function metaOf(data: Record<string, unknown>): AssetMeta | undefined {
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const list = (v: unknown) => (listOf(v).length ? listOf(v) : undefined);
+  const meta: AssetMeta = {
+    tools: list(data.tools ?? data['allowed-tools']),
+    model: text(data.model),
+    color: text(data.color),
+    paths: list(data.paths),
+    manual: data['disable-model-invocation'] === true || undefined,
+  };
+  const set = Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined));
+  return Object.keys(set).length ? set : undefined;
+}
+
 function markdownAssets(scope: HarnessScope, dir: string, kind: Kind, recursive: boolean, nameOf: (rel: string) => string): Asset[] {
   return listFiles(dir, n => n.toLowerCase().endsWith('.md'), recursive).map(rel => {
     const file = path.join(dir, rel);
     const name = nameOf(rel);
     const { data } = readMarkdown(file);
-    return { id: `${scope.id}|${kind}:${name}`, scope: scope.id, kind, name, description: oneLine(data.description), version: versionOf(data), file, mtime: mtimeOf(file) };
+    return { id: `${scope.id}|${kind}:${name}`, scope: scope.id, kind, name, description: oneLine(data.description), version: versionOf(data), file, mtime: mtimeOf(file), meta: metaOf(data) };
   });
 }
 
@@ -516,6 +542,8 @@ function skillAssets(scope: HarnessScope, skillsDir: string): Asset[] {
       dir,
       files: listFiles(dir, () => true, true).map(f => f.split(path.sep).join('/')),
       mtime: mtimeOf(file),
+      meta: metaOf(data),
+      link: fs.lstatSync(dir).isSymbolicLink() ? fs.realpathSync(dir) : undefined,
     });
   }
   return out;

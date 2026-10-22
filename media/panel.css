@@ -2218,3 +2218,315 @@ mark {
   overflow-wrap: anywhere;
   max-height: 420px;
 }
+
+/* Type pages: search, preset filters, facet chips and the element table. */
+.kind-search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kind-search .combo {
+  max-width: 720px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.preset,
+.filter-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.preset:hover,
+.filter-add:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.preset.on {
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+}
+
+.preset-n {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.preset.on .preset-n {
+  color: inherit;
+}
+
+.filter-add {
+  padding-left: 6px;
+  border-style: dashed;
+  color: var(--vscode-descriptionForeground);
+}
+
+.filter-add:hover {
+  color: var(--vscode-foreground);
+}
+
+.filter-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 3px 4px;
+  background: var(--vscode-panel-border);
+}
+
+.preset:focus-visible,
+.filter-add:focus-visible,
+.tile:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.asset-table {
+  container-type: inline-size;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.at-row {
+  display: grid;
+  grid-template-columns: var(--at-cols);
+  column-gap: 16px;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--vscode-panel-border);
+  cursor: pointer;
+}
+
+.at-row:first-child {
+  border-top: none;
+}
+
+.at-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.at-row:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.at-row.at-head {
+  min-height: 28px;
+  cursor: default;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-editorWidget-background);
+}
+
+.at-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.at-name .swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.at-row.static {
+  cursor: default;
+}
+
+.at-row.static:hover {
+  background: transparent;
+}
+
+.at-label,
+.at-cell,
+.at-fact {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.at-muted {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.at-fact {
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.at-fact.on {
+  color: var(--vscode-foreground);
+}
+
+.at-fact.warn,
+.at-cell.warn {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.at-head .at-cell,
+.at-head .at-fact {
+  font-size: 11px;
+  color: inherit;
+}
+
+.at-row.disabled .at-label,
+.at-row.disabled .at-name {
+  opacity: 0.6;
+}
+
+.at-indent {
+  flex: none;
+  width: calc(var(--depth, 0) * 16px);
+}
+
+@container (max-width: 620px) {
+  .at-row {
+    grid-template-columns: var(--at-cols-narrow);
+  }
+
+  .at-wide {
+    display: none;
+  }
+}
+
+/* Origin groups: the sidebar's sub-heads and the type page's one table per origin. */
+.origin-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  margin-top: 2px;
+  padding: 0 12px 0 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.origin-head:hover {
+  background: var(--vscode-list-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.origin-head:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.origin-head.nested {
+  padding-left: 34px;
+}
+
+.origin-head .label,
+.origin-label .label {
+  flex: 1;
+}
+
+.origin-n {
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.row .desc.warn {
+  opacity: 1;
+}
+
+.kind-results,
+.origin-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.kind-results {
+  gap: 4px;
+}
+
+.origin-section + .origin-section {
+  margin-top: 14px;
+}
+
+.origin-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Repo page: compact harness tiles and the tab counts. */
+.overview.compact {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.overview.compact .tile {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.overview.compact .tile .n {
+  min-width: 2.5ch;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview.compact .tile.zero {
+  opacity: 0.55;
+}
+
+.overview.compact .tile.zero:hover {
+  opacity: 1;
+}
+
+.tab-count {
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preset,
+  .filter-add {
+    transition: none;
+  }
+}

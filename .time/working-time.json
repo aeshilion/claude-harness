@@ -798,6 +798,67 @@
       "catalogue": {
         "action": "none"
       }
+    },
+    {
+      "date": "2026-10-21",
+      "from": "08:48",
+      "to": "09:53",
+      "sessionId": "145c3d5e-4046-4900-b523-aede8d2ee512",
+      "branch": "master",
+      "commits": [
+        "c5df07e"
+      ],
+      "surfaces": [
+        "claude-harness"
+      ],
+      "files": [
+        "media/panel.js",
+        "src/sessions.ts",
+        "src/style.ts",
+        "src/extension.ts",
+        "src/panel.ts"
+      ],
+      "mechanism": {
+        "takes": "an AI coding session's transcript: token usage priced per model, the user's prompts, the assistant's replies and the output style that was active, plus a choice of subscription plan and model",
+        "does": "shows the session's cost either in dollars or as a share of a plan's weekly limit with the estimate marked, scans the prompts for corrections about length, format, language and repetition and measures reply length and formatting without any AI, and on the user's consent sends only that digest to the user's own Claude login in a stripped-down headless call that drafts a reply-style file; exports a transcript and imports one into another project so the coding agent can resume it there",
+        "returns": "a cost figure per billing model, a style evidence panel, a drafted output style file saved next to the user's own without overwriting one, and portable session transcripts"
+      },
+      "portsAsIs": [
+        "consent-gated headless call to the user's own AI subscription with a minimal context",
+        "keyword scan of user corrections as evidence for a style or prompt profile",
+        "cost view switch between pay-per-token and subscription-share",
+        "transcript export and import keyed on the session id inside the file"
+      ],
+      "perCustomer": [
+        "the plans and their weekly limit estimates",
+        "the correction phrases and languages scanned for"
+      ],
+      "evidence": [
+        "139 sessions across three repositories scanned with no errors",
+        "haiku draft from a 133-prompt session cost under a tenth of a cent with the user's CLAUDE.md kept out",
+        "a transcript copied to another folder resumed there and recalled the original conversation",
+        "browser preview renders: cost toggle, output style section idle, drafting, done and error, house tooltips",
+        "sideloaded 0.2.14 to 0.2.23, installed=True"
+      ],
+      "toolchain": {
+        "skills": [
+          "vscode-extension",
+          "claude-learn",
+          "claude-learn-harvest",
+          "claude-learn-worktime",
+          "track-time"
+        ],
+        "mcpServers": [],
+        "agents": [
+          "subagent-delegation-plugin:fact-gatherer",
+          "fork"
+        ]
+      },
+      "industry": "developer tooling",
+      "status": "Built and running in-house",
+      "catalogue": {
+        "action": "none"
+      }
     }
   ]
 }
