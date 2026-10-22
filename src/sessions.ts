@@ -33,6 +33,22 @@ const PRICES: [RegExp, { input: number; output: number; cacheRead: number }][] =
   [/haiku/, { input: 0.1, output: 0.5, cacheRead: 0.01 }],
 ];
 
+/**
+ * Weekly limit of each plan, valued in USD at API list prices. Anthropic publishes none: these are third-party
+ * estimates (Max 5x, Max 20x, Team Premium) and two derived ones (Pro is Max 5x / 5, Team Standard is Team Premium / 5).
+ * Same ids and figures as BILLING in media/panel.js. `api` has no limit.
+ */
+export const PLANS: { id: string; label: string; limit: number }[] = [
+  { id: 'pro', label: 'Pro', limit: 105 },
+  { id: 'max5', label: 'Max 5x', limit: 523 },
+  { id: 'max20', label: 'Max 20x', limit: 1643 },
+  { id: 'team-standard', label: 'Team Standard', limit: 172 },
+  { id: 'team', label: 'Team Premium', limit: 861 },
+  { id: 'api', label: 'API billing', limit: 0 },
+];
+
+export const planLimit = (plan: string | undefined): number => PLANS.find(p => p.id === plan)?.limit ?? 0;
+
 type ApiUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number; cache_creation?: { ephemeral_1h_input_tokens?: number } };
 
 /** Cost of one API response by token kind: 5-minute cache writes at 1.25 times input, 1-hour writes at 2 times. */

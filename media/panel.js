@@ -2973,12 +2973,18 @@
   ];
   // Weekly limits valued at API list prices. Anthropic publishes none: Max 5x from botfarm.run (March 2026),
   // Max 20x and Team Premium from wokey.ai (accounts measured 2026-10-12 to 2026-10-19). API billing has no grant.
+  // Two figures are derived, not measured: Pro is one fifth of Max 5x (about 105) and Team Standard one fifth of
+  // Team Premium (about 172), because claude.com/pricing sells Max 5x at 5 times Pro and Premium at 5 times Standard.
+  // The ids and figures match PLANS in src/sessions.ts, which a unit test compares. Keep `api` last.
   const BILLING = [
+    ['pro', 'Pro', 'account', 105],
     ['max5', 'Max 5x', 'dashboard', 523],
     ['max20', 'Max 20x', 'rocket', 1643],
+    ['team-standard', 'Team Standard', 'organization', 172],
     ['team', 'Team Premium', 'organization', 861],
     ['api', 'API billing', 'credit-card', 0],
   ];
+  const TEAM_PLANS = new Set(['team', 'team-standard']);
   const billingAbout = (label, grant) => (grant ? `This session as a share of one ${label} weekly limit, which measures at about $${grant.toLocaleString()} of API list prices.` : 'This session at Anthropic API list prices.');
 
   function costBar(parts, total, label, fmt) {
@@ -3015,15 +3021,18 @@
       tone: `kind-${key}`,
       cost: [d.usage, ...d.agents.map(a => a.usage)].reduce((n, u) => n + ((u.costParts || {})[key] || 0), 0),
     }));
-    const [, planLabel, , grant] = BILLING.find(b => b[0] === state.billing) || BILLING[BILLING.length - 1];
+    // The plan set for the session's account in the settings is the default; a click on the switch overrides it.
+    const billingId = state.billingPick || (BILLING.some(b => b[0] === d.plan) ? d.plan : state.billing);
+    const [, planLabel, , grant] = BILLING.find(b => b[0] === billingId) || BILLING[BILLING.length - 1];
     const fmt = grant ? v => fmtShare(v, grant) : fmtUsd;
     const plans = modeSwitch(
       app,
       BILLING.map(([id, label, glyph, g]) => [id, label, glyph, billingAbout(label, g)]),
-      state.billing,
+      billingId,
       'Billing',
       id => {
         state.billing = id;
+        state.billingPick = id;
         card.replaceWith(renderCost(d, colors));
       }
     );
@@ -3039,7 +3048,11 @@
           'div',
           { className: 'cost-basis' },
           grant
-            ? [billingAbout(planLabel, grant), el('div', {}, '* Not exact prices: Anthropic publishes no figure for a weekly limit, so this is an estimate.')]
+            ? [
+                billingAbout(planLabel, grant),
+                el('div', {}, '* Not exact prices: Anthropic publishes no figure for a weekly limit, so this is an estimate.'),
+                TEAM_PLANS.has(billingId) ? el('div', {}, 'Team plans expose no rate limits to Claude Code, so the share cannot be read from the status line.') : null,
+              ]
             : 'At Anthropic API list prices for the tokens in this session and its agents. A Claude subscription bills differently.'
         )
       ),
