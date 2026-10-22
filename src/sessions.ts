@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { projectSlug } from './fleet';
 
@@ -32,6 +33,26 @@ const PRICES: [RegExp, { input: number; output: number; cacheRead: number }][] =
   [/haiku-4/, { input: 1, output: 5, cacheRead: 0.1 }],
   [/haiku/, { input: 0.1, output: 0.5, cacheRead: 0.01 }],
 ];
+
+/**
+ * Weekly limit of each plan, valued in USD at API list prices. Anthropic publishes none: these are third-party
+ * estimates (Max 5x, Max 20x) and one measured against the Claude app's usage card on one Team Premium seat, 2026-10-22
+ * (56 % used = 566 $ at list prices, so about 1010 $; one sample, still an estimate). Two are derived: Pro is Max 5x / 5,
+ * Team Standard is Team Premium / 5.
+ * `families` are weekly limits of one model family of its own (matched in the model id), valued the same way: Fable, from
+ * the same Team Premium measurement (46 % used = 99 $, so about 215 $), and a fifth of it for Team Standard.
+ * Same ids and figures as BILLING in media/panel.js. `api` has no limit.
+ */
+export const PLANS: { id: string; label: string; limit: number; families?: Record<string, number> }[] = [
+  { id: 'pro', label: 'Pro', limit: 105 },
+  { id: 'max5', label: 'Max 5x', limit: 523 },
+  { id: 'max20', label: 'Max 20x', limit: 1643 },
+  { id: 'team-standard', label: 'Team Standard', limit: 202, families: { fable: 43 } },
+  { id: 'team', label: 'Team Premium', limit: 1010, families: { fable: 215 } },
+  { id: 'api', label: 'API billing', limit: 0 },
+];
+
+export const planLimit = (plan: string | undefined): number => PLANS.find(p => p.id === plan)?.limit ?? 0;
 
 type ApiUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number; cache_creation?: { ephemeral_1h_input_tokens?: number } };
 
@@ -67,6 +88,9 @@ export interface SessionSummary {
   branch?: string;
   headless: boolean;
   live?: string;
+  /** Label and config folder of the account the session ran under; set only when more than one account is configured. */
+  account?: string;
+  accountRoot?: string;
   children: SessionSummary[];
 }
 
@@ -382,6 +406,222 @@ export function listSessions(dir: string, root: string): SessionSummary[] {
   }
   for (const s of own) s.children.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
   return own.sort((a, b) => b.end - a.end);
+}
+
+/** A Claude config folder with the plan of the seat that uses it. Claude Code reads another one from `CLAUDE_CONFIG_DIR`. */
+export interface Account {
+  label: string;
+  root: string;
+  /** An id of PLANS. */
+  plan?: string;
+  /** When the plan's weekly limit resets, as `Mon 11:00` in UTC. Unset means a rolling 7 days. */
+  weekStart?: string;
+}
+
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/** Reads `Mon 11:00` (weekday, UTC hour and optional minute; `Monday 9` also works). Anything else is undefined. */
+export function parseWeekStart(spec: unknown): { day: number; hour: number; minute: number } | undefined {
+  const m = typeof spec === 'string' ? /^([a-z]{3})[a-z]*\s+(\d{1,2})(?::(\d{2}))?$/i.exec(spec.trim()) : null;
+  if (!m) return undefined;
+  const day = DAYS.indexOf(m[1].toLowerCase());
+  const hour = Number(m[2]);
+  const minute = m[3] ? Number(m[3]) : 0;
+  return day < 0 || hour > 23 || minute > 59 ? undefined : { day, hour, minute };
+}
+
+/** The latest reset at or before `now`, in ms: the start of the current weekly window. Undefined for an unset or invalid spec. */
+export function lastReset(spec: string | undefined, now: number): number | undefined {
+  const w = parseWeekStart(spec);
+  if (!w) return undefined;
+  const d = new Date(now);
+  let at = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() - w.day + 7) % 7), w.hour, w.minute);
+  if (at > now) at -= WEEK_MS;
+  return at;
+}
+
+const expandHome = (p: string, home: string) => (p === '~' ? home : /^~[\\/]/.test(p) ? path.join(home, p.slice(2)) : p);
+const samePlace = (a: string, b: string) => {
+  const norm = (p: string) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+  return norm(a) === norm(b);
+};
+
+/**
+ * The accounts to read: the main config folder first, then each entry of the `claudeHarness.accounts` setting.
+ * Entries without a path, with a path that repeats an earlier one, or that are not objects are dropped; an
+ * unknown plan or week start becomes none and a missing label becomes the folder name. With no extra entry the list is just the main one.
+ */
+export function parseAccounts(mainRoot: string, mainPlan: string | undefined, raw: unknown, home = os.homedir(), mainWeekStart?: string): Account[] {
+  const known = (plan: unknown) => (typeof plan === 'string' && PLANS.some(p => p.id === plan) ? plan : undefined);
+  const start = (v: unknown) => (parseWeekStart(v) ? (v as string).trim() : undefined);
+  const accounts: Account[] = [{ label: 'Default', root: mainRoot, plan: known(mainPlan), weekStart: start(mainWeekStart) }];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const p = typeof entry.path === 'string' ? entry.path.trim() : '';
+    if (!p) continue;
+    const root = expandHome(p, home);
+    if (accounts.some(a => samePlace(a.root, root))) continue;
+    const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : path.basename(path.resolve(root)) || root;
+    accounts.push({ label, root, plan: known(entry.plan), weekStart: start(entry.weekStart) });
+  }
+  return accounts;
+}
+
+/**
+ * The sessions of a repo in every account, newest first. With more than one account each session, and each
+ * headless child, carries its account label and folder; with one account the list equals `listSessions`.
+ */
+export function listAccountSessions(dir: string, accounts: Account[]): SessionSummary[] {
+  if (accounts.length === 1) return listSessions(dir, accounts[0].root);
+  const tag = (s: SessionSummary, a: Account): SessionSummary => ({ ...s, account: a.label, accountRoot: a.root, children: s.children.map(c => tag(c, a)) });
+  return accounts.flatMap(a => listSessions(dir, a.root).map(s => tag(s, a))).sort((x, y) => y.end - x.end);
+}
+
+export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface WeekModel {
+  model: string;
+  /** API responses counted, each message id once. */
+  messages: number;
+  input: number;
+  cacheCreate: number;
+  cacheRead: number;
+  output: number;
+  /** Cost at API list prices. */
+  cost: number;
+}
+
+/** What one account used from `since` to `until` (the last 7 days, or since the plan's reset), over every repo, agents included. */
+export interface WeekTotal {
+  account: string;
+  plan?: string;
+  /** Estimated weekly limit of the plan in USD at list prices; 0 when there is no plan or it bills by the token. */
+  limit: number;
+  since: number;
+  until: number;
+  /** True when the window starts at the plan's last reset, false for a rolling 7 days. */
+  fromReset: boolean;
+  models: WeekModel[];
+  /** Model families with a limit of their own on this plan, with what the account used of each. */
+  families: { family: string; cost: number; limit: number; share: number }[];
+  cost: number;
+  tokens: number;
+  /** cost / limit; absent without a limit. */
+  share?: number;
+}
+
+/** One assistant response as it counts toward a week. */
+export interface WeekEntry {
+  key: string;
+  at: number;
+  model: string;
+  usage: ApiUsage;
+}
+
+/** The priced-or-not responses of a transcript: assistant records with a model and usage. A model like `<synthetic>` is no response. */
+export function weekEntries(records: Rec[]): WeekEntry[] {
+  const out: WeekEntry[] = [];
+  for (const o of records) {
+    const m = o.message;
+    const key = m?.id ?? o.uuid;
+    const at = time(o);
+    if (o.type !== 'assistant' || !m?.usage || typeof m.model !== 'string' || m.model.startsWith('<') || typeof key !== 'string' || Number.isNaN(at)) continue;
+    out.push({ key, at, model: m.model, usage: m.usage });
+  }
+  return out;
+}
+
+/** Sums entries inside [since, until] by model. `seen` holds the message ids already counted, so a message repeated in another file counts once. */
+export function addWeek(models: Map<string, WeekModel>, seen: Set<string>, entries: WeekEntry[], since: number, until: number): void {
+  for (const e of entries) {
+    if (e.at < since || e.at > until || seen.has(e.key)) continue;
+    seen.add(e.key);
+    const row = models.get(e.model) ?? { model: e.model, messages: 0, input: 0, cacheCreate: 0, cacheRead: 0, output: 0, cost: 0 };
+    row.messages += 1;
+    row.input += e.usage.input_tokens ?? 0;
+    row.cacheCreate += e.usage.cache_creation_input_tokens ?? 0;
+    row.cacheRead += e.usage.cache_read_input_tokens ?? 0;
+    row.output += e.usage.output_tokens ?? 0;
+    row.cost += messageCost(e.model, e.usage);
+    models.set(e.model, row);
+  }
+}
+
+/** Costliest model first. */
+export function weekTotal(account: Account, models: Map<string, WeekModel>, since: number, until: number): WeekTotal {
+  const rows = [...models.values()].sort((a, b) => b.cost - a.cost || b.messages - a.messages || a.model.localeCompare(b.model));
+  const cost = rows.reduce((n, r) => n + r.cost, 0);
+  const limit = planLimit(account.plan);
+  return {
+    account: account.label,
+    plan: account.plan,
+    limit,
+    since,
+    until,
+    fromReset: !!lastReset(account.weekStart, until),
+    models: rows,
+    families: Object.entries(PLANS.find(p => p.id === account.plan)?.families ?? {}).map(([family, fl]) => {
+      const used = rows.filter(r => r.model.toLowerCase().includes(family)).reduce((n, r) => n + r.cost, 0);
+      return { family, cost: used, limit: fl, share: used / fl };
+    }),
+    cost,
+    tokens: rows.reduce((n, r) => n + r.input + r.cacheCreate + r.cacheRead + r.output, 0),
+    share: limit > 0 ? cost / limit : undefined,
+  };
+}
+
+const weekFiles = new Map<string, { mtime: number; size: number; entries: WeekEntry[] }>();
+
+/** The transcripts of an account touched since `since`: every repo's sessions and their agents' files. */
+function transcriptFiles(root: string, since: number): string[] {
+  const projects = path.join(root, 'projects');
+  const files: string[] = [];
+  const add = (file: string) => {
+    try {
+      if (fs.statSync(file).mtimeMs >= since) files.push(file);
+    } catch {
+      // gone while reading
+    }
+  };
+  for (const repo of readdir(projects)) {
+    const folder = path.join(projects, repo);
+    for (const name of readdir(folder)) {
+      if (name.endsWith('.jsonl')) add(path.join(folder, name));
+      else for (const f of readdir(path.join(folder, name, 'subagents'))) if (f.endsWith('.jsonl')) add(path.join(folder, name, 'subagents', f));
+    }
+  }
+  return files.sort();
+}
+
+/** The week of one account by model: since the plan's last reset when `weekStart` is set, else the last 7 days. Reads transcripts touched in that window only, and keeps what it read per file until the file changes. */
+export async function accountWeek(account: Account, now = Date.now()): Promise<WeekTotal> {
+  const models = new Map<string, WeekModel>();
+  const seen = new Set<string>();
+  const since = lastReset(account.weekStart, now) ?? now - WEEK_MS;
+  for (const file of transcriptFiles(account.root, since)) {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.stat(file);
+    } catch {
+      continue;
+    }
+    let cached = weekFiles.get(file);
+    if (!cached || cached.mtime !== stat.mtimeMs || cached.size !== stat.size) {
+      cached = { mtime: stat.mtimeMs, size: stat.size, entries: weekEntries(await readRecords(file).catch(() => [])) };
+      weekFiles.set(file, cached);
+    }
+    addWeek(models, seen, cached.entries, since, now);
+  }
+  return weekTotal(account, models, since, now);
+}
+
+/** Finds a session of the repo, or a headless child of one, by id, in any account. */
+export function findAccountSession(dir: string, accounts: Account[], id: string): SessionSummary | undefined {
+  for (const a of accounts) {
+    const hit = findSession(dir, a.root, id);
+    if (hit) return accounts.length === 1 ? hit : { ...hit, account: a.label, accountRoot: a.root };
+  }
+  return undefined;
 }
 
 /** Finds a session of the repo, or a headless child of one, by id. */

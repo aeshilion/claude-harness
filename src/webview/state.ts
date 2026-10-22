@@ -35,11 +35,15 @@ export interface State {
   allSessions: Set<string>;
   session?: any;
   sessionsPage?: any;
+  /** The weekly summary of every account; null while it is read. */
+  weekly?: any;
   kindPage?: any;
   sessionView: string;
   decisionMode: string;
   mapMode: string;
   billing: string;
+  /** The plan picked on the Billing switch in this panel; until then a session starts on its account's plan. */
+  billingPick?: string;
   styleModel: string;
   repoTab: string;
   /** Detail pages open in view mode; edit shows the form. A dirty draft renders in view mode as its preview. */

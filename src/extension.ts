@@ -51,7 +51,7 @@ import {
   validateName,
 } from './harness';
 import { HarnessPanel, PanelHost } from './panel';
-import { findSession, importTranscript, listSessions, readSession } from './sessions';
+import { Account, accountWeek, findAccountSession, importTranscript, listAccountSessions, parseAccounts, readSession } from './sessions';
 import { STYLE_MODELS, StyleModel, draftStyle, stylePrompt, writeStyleDraft } from './style';
 import { pickTools, splitTools, TOOL_FIELDS } from './tools';
 import { HarnessTree, Node } from './tree';
@@ -60,6 +60,10 @@ const WATCHED = '{CLAUDE.md,settings.json,settings.local.json,agents/**,skills/*
 
 export function activate(context: vscode.ExtensionContext): void {
   let global: HarnessScope = globalScope(vscode.workspace.getConfiguration('claudeHarness').get<string>('root'));
+  const accounts = (): Account[] => {
+    const config = vscode.workspace.getConfiguration('claudeHarness');
+    return parseAccounts(global.root, config.get<string>('plan'), config.get<unknown>('accounts'), undefined, config.get<string>('weekStart'));
+  };
   let scopes: HarnessScope[] = [global];
   let views: ScopeView[] = [];
   let plugins: ScopeView[] = [];
@@ -82,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
     dir => constitution.summary(dir),
     dirs => constitution.ensure(dirs),
     () => !!provider,
-    dir => listSessions(dir, global.root)
+    dir => listAccountSessions(dir, accounts())
   );
   let watcher: vscode.FileSystemWatcher | undefined;
   let timer: NodeJS.Timeout | undefined;
@@ -266,11 +270,12 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     sessions: id => {
       const view = viewOfScope(id);
-      return view && view.id !== global.id ? listSessions(view.path, global.root) : [];
+      return view && view.id !== global.id ? listAccountSessions(view.path, accounts()) : [];
     },
+    weekly: () => Promise.all(accounts().map(a => accountWeek(a))),
     session: async (id, sessionId) => {
       const view = viewOfScope(id);
-      const summary = view && view.id !== global.id ? findSession(view.path, global.root, sessionId) : undefined;
+      const summary = view && view.id !== global.id ? findAccountSession(view.path, accounts(), sessionId) : undefined;
       if (!summary) return undefined;
       const detail = await readSession(summary);
       // An agent definition's own `color` field colors its lanes.
@@ -281,11 +286,11 @@ export function activate(context: vscode.ExtensionContext): void {
         const color = asset ? readMarkdown(asset.file).data.color : undefined;
         if (typeof color === 'string') agentColors[type] = color.trim().toLowerCase();
       }
-      return { ...detail, repo: view!.label, agentColors };
+      return { ...detail, repo: view!.label, agentColors, account: summary.account, plan: accounts().find(a => a.root === (summary.accountRoot ?? global.root))?.plan };
     },
     draftStyle: async (id, sessionId, model, started) => {
       const scope = scopes.find(s => s.id === id && s.id !== global.id);
-      const summary = scope ? findSession(scope.base, global.root, sessionId) : undefined;
+      const summary = scope ? findAccountSession(scope.base, accounts(), sessionId) : undefined;
       if (!scope || !summary) return { state: 'error', error: 'The session transcript is gone.' };
       if (!STYLE_MODELS.includes(model as StyleModel)) return { state: 'error', error: `Unknown model ${model}.` };
       const scan = (await readSession(summary)).style;
@@ -313,7 +318,7 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     exportSession: async (id, sessionId) => {
       const scope = scopes.find(s => s.id === id && s.id !== global.id);
-      const summary = scope ? findSession(scope.base, global.root, sessionId) : undefined;
+      const summary = scope ? findAccountSession(scope.base, accounts(), sessionId) : undefined;
       if (!summary) return void vscode.window.showErrorMessage('The session transcript is gone.');
       const downloads = path.join(os.homedir(), 'Downloads');
       const target = await vscode.window.showSaveDialog({
@@ -484,6 +489,7 @@ export function activate(context: vscode.ExtensionContext): void {
         loadScopes();
         refresh();
       }
+      if (e.affectsConfiguration('claudeHarness.accounts') || e.affectsConfiguration('claudeHarness.plan') || e.affectsConfiguration('claudeHarness.weekStart')) refresh();
       if (!e.affectsConfiguration('claudeHarness.root')) return;
       global = globalScope(vscode.workspace.getConfiguration('claudeHarness').get<string>('root'));
       loadScopes();

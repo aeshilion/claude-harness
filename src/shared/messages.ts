@@ -52,6 +52,7 @@ export type ToHost =
   | { type: 'initForm'; dir: string }
   | { type: 'initRun'; dir: string; form: ScaffoldForm; apply: boolean }
   | { type: 'sessions'; scope: string }
+  | { type: 'weekly' }
   | { type: 'session'; scope: string; id: string }
   | { type: 'draftStyle'; scope: string; id: string; model: string }
   | { type: 'exportSession'; scope: string; id: string }
@@ -72,5 +73,6 @@ export type ToWebview =
   | { type: 'initForm'; dir: string; data: unknown }
   | { type: 'initResult'; dir: string; apply: boolean; data: unknown }
   | { type: 'sessions'; scope: string; list: SessionSummary[] }
+  | { type: 'weekly'; list: unknown }
   | { type: 'session'; scope: string; id: string; data: unknown }
   | ({ type: 'styleDraft'; scope: string; id: string } & StyleDraft);
