@@ -45,6 +45,7 @@ type Message =
   | { type: 'initForm'; dir: string }
   | { type: 'initRun'; dir: string; form: ScaffoldForm; apply: boolean }
   | { type: 'sessions'; scope: string }
+  | { type: 'weekly' }
   | { type: 'session'; scope: string; id: string }
   | { type: 'draftStyle'; scope: string; id: string; model: string }
   | { type: 'exportSession'; scope: string; id: string }
@@ -66,6 +67,8 @@ export interface PanelHost {
   initRun?(dir: string, form: ScaffoldForm, apply: boolean): Promise<unknown>;
   sessions?(scopeId: string): unknown;
   session?(scopeId: string, id: string): Promise<unknown>;
+  /** The last 7 days of every account by model, over all repos. */
+  weekly?(): Promise<unknown>;
   /** Asks first, then drafts an output style from the session's style scan; `started` fires once the user agreed. */
   draftStyle?(scopeId: string, id: string, model: string, started: () => void): Promise<{ state: 'idle' } | { state: 'done'; file: string; cost?: number } | { state: 'error'; error: string }>;
   exportSession?(scopeId: string, id: string): Promise<void>;
@@ -294,6 +297,16 @@ export class HarnessPanel {
       case 'sessions':
         this.post({ type: 'sessions', scope: m.scope, list: this.host.sessions?.(m.scope) ?? [] });
         return;
+      case 'weekly': {
+        let list: unknown = [];
+        try {
+          list = (await this.host.weekly?.()) ?? [];
+        } catch {
+          // an unreadable account folder shows no summary
+        }
+        this.post({ type: 'weekly', list });
+        return;
+      }
       case 'session': {
         let data: unknown;
         try {

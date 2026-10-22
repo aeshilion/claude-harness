@@ -49,6 +49,10 @@ A chosen filter becomes a chip. Press Backspace in an empty box to remove the la
 
 When `claudeHarness.accounts` lists more than one Claude config folder, the sessions of every account are listed together, newest first, and each session shows the label of its account before its date. The session header shows it too, and the **Billing** switch of the cost row starts on the plan set for that account. See [Settings](settings.md#several-accounts) for the setting. With one account, nothing is labeled.
 
+### Last 7 days
+
+The top of the sessions page sums what each account used in the last 7 days, over all its repos and including the agents' transcripts. One block per account shows the tokens and, per model, the tokens, the cost at Anthropic API list prices and the number of replies, costliest model first. A reply that appears in more than one transcript, as after a resumed session, counts once. When the account has a plan, the cost is shown as a share of that plan's weekly limit, marked `*`: Anthropic publishes no figure for it, so the limit is an estimate. Team plans expose no rate limits to Claude Code's status line, so their share cannot be checked against it. The refresh button reads the week again.
+
 ## Session page
 
 The header shows the repo, the start and end, the duration, the branch and the model. Below it, the cost row shows an estimated cost at Anthropic API list prices. A Claude subscription bills differently. Two bars split the cost by **Who spent it** (the main thread and each agent type) and by **Spent on** (cache reads, cache writes, output and input).

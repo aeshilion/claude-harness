@@ -8,6 +8,7 @@ All notable changes to Claude Harness are listed here, newest first. The format 
 
 - The Billing switch on the session page lists Pro and Team Standard next to Max 5x, Max 20x, Team Premium and API billing. Both new limits are derived estimates, one fifth of Max 5x and of Team Premium. A Team plan adds a note that Claude Code's status line carries no rate limits for it. See [Sessions](docs/sessions.md#session-page).
 - The settings `claudeHarness.plan` and `claudeHarness.accounts` set the plan of each Claude account, and list more config folders (`CLAUDE_CONFIG_DIR`) on one machine. The sessions of every account are listed together, each labeled with its account, and the cost row starts on the account's plan. Default is empty, which changes nothing. See [Settings](docs/settings.md#several-accounts).
+- The sessions page opens with the last 7 days of each account: tokens and cost at API list prices per model, over all repos and agents, and the share of the plan's estimated weekly limit when a plan is set. See [Sessions](docs/sessions.md#last-7-days).
 
 ## [0.2.13] - 2026-10-21
 

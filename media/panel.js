@@ -1315,7 +1315,10 @@
     const reload = iconBtn('refresh', 'Read the sessions again', () => {
       state.sessions[p.scope] = null;
       vscode.postMessage({ type: 'sessions', scope: p.scope });
+      state.weekly = null;
+      vscode.postMessage({ type: 'weekly' });
       p.refresh();
+      p.drawWeek();
     });
     const results = el('div', { className: 'recent' });
     const suggest = el('div', { className: 'suggest', role: 'listbox', id: 'session-suggest', hidden: true });
@@ -1471,6 +1474,35 @@
       list = state.sessions[p.scope];
       update();
     };
+    // The last 7 days of each account by model, over all repos. A plan shows the cost as a share of its estimated weekly limit.
+    const week = el('div', { className: 'week' });
+    const drawWeek = () => {
+      const totals = state.weekly;
+      if (!totals) {
+        week.replaceChildren(el('div', { className: 'empty flush' }, 'Reading the last 7 days...'));
+        return;
+      }
+      week.replaceChildren(
+        ...totals.map(t => {
+          const plan = BILLING.find(b => b[0] === t.plan);
+          const head = [t.account, plan ? plan[1] : '', fmtNum(t.tokens) + ' tokens', t.limit ? `${fmtShare(t.cost, t.limit)} of the weekly limit*` : fmtUsd(t.cost)].filter(Boolean).join(' · ');
+          return el(
+            'div',
+            { className: 'recent' },
+            el('div', { className: 'group-label', title: `Last 7 days, all repos and their agents, at Anthropic API list prices.${t.limit ? ' * Not exact prices: the limit of a plan is an estimate.' : ''}${TEAM_PLANS.has(t.plan) ? ' Team plans expose no rate limits to Claude Code, so the share is an estimate.' : ''}` }, `Last 7 days · ${head}`),
+            t.models.length
+              ? t.models.map(m => el('div', { className: 'row' }, icon('chip'), el('span', { className: 'name' }, shortModel(m.model)), el('span', { className: 'desc' }, [`${fmtNum(m.input + m.cacheCreate + m.cacheRead + m.output)} tokens`, t.limit ? fmtShare(m.cost, t.limit) : fmtUsd(m.cost), `${m.messages} replies`].join(' · '))))
+              : el('div', { className: 'empty flush' }, 'No usage in the last 7 days.')
+          );
+        })
+      );
+    };
+    p.drawWeek = drawWeek;
+    if (state.weekly === undefined) {
+      state.weekly = null;
+      vscode.postMessage({ type: 'weekly' });
+    }
+    drawWeek();
     update();
     if (p.focus) {
       p.focus = false;
@@ -1480,7 +1512,7 @@
       'section',
       { className: 'main' },
       pageHead('history', 'Sessions', view ? `${view.label} · ${view.path}` : '', back, reload),
-      el('div', { className: 'main-body' }, el('div', { className: 'session-search' }, el('div', { className: 'combo' }, icon('search'), input, suggest), chips), results)
+      el('div', { className: 'main-body' }, week, el('div', { className: 'session-search' }, el('div', { className: 'combo' }, icon('search'), input, suggest), chips), results)
     );
   }
 
@@ -3285,6 +3317,9 @@
     } else if (m.type === 'marketplaces') {
       state.markets = m.list;
       if (state.page === 'marketplaces' && !state.detail) renderMain();
+    } else if (m.type === 'weekly') {
+      state.weekly = m.list || [];
+      if (!state.detail && state.page === 'sessions' && state.sessionsPage && state.sessionsPage.drawWeek) state.sessionsPage.drawWeek();
     } else if (m.type === 'sessions') {
       state.sessions[m.scope] = m.list || [];
       refreshCard(`repo:${m.scope}`);

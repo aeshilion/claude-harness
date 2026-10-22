@@ -51,7 +51,7 @@ import {
   validateName,
 } from './harness';
 import { HarnessPanel, PanelHost } from './panel';
-import { Account, findAccountSession, importTranscript, listAccountSessions, parseAccounts, readSession } from './sessions';
+import { Account, accountWeek, findAccountSession, importTranscript, listAccountSessions, parseAccounts, readSession } from './sessions';
 import { STYLE_MODELS, StyleModel, draftStyle, stylePrompt, writeStyleDraft } from './style';
 import { pickTools, splitTools, TOOL_FIELDS } from './tools';
 import { HarnessTree, Node } from './tree';
@@ -254,6 +254,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const view = viewOfScope(id);
       return view && view.id !== global.id ? listAccountSessions(view.path, accounts()) : [];
     },
+    weekly: () => Promise.all(accounts().map(a => accountWeek(a))),
     session: async (id, sessionId) => {
       const view = viewOfScope(id);
       const summary = view && view.id !== global.id ? findAccountSession(view.path, accounts(), sessionId) : undefined;

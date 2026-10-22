@@ -448,6 +448,134 @@ export function listAccountSessions(dir: string, accounts: Account[]): SessionSu
   return accounts.flatMap(a => listSessions(dir, a.root).map(s => tag(s, a))).sort((x, y) => y.end - x.end);
 }
 
+export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface WeekModel {
+  model: string;
+  /** API responses counted, each message id once. */
+  messages: number;
+  input: number;
+  cacheCreate: number;
+  cacheRead: number;
+  output: number;
+  /** Cost at API list prices. */
+  cost: number;
+}
+
+/** What one account used in the 7 days before `until`, over every repo, agents included. */
+export interface WeekTotal {
+  account: string;
+  plan?: string;
+  /** Estimated weekly limit of the plan in USD at list prices; 0 when there is no plan or it bills by the token. */
+  limit: number;
+  since: number;
+  until: number;
+  models: WeekModel[];
+  cost: number;
+  tokens: number;
+  /** cost / limit; absent without a limit. */
+  share?: number;
+}
+
+/** One assistant response as it counts toward a week. */
+export interface WeekEntry {
+  key: string;
+  at: number;
+  model: string;
+  usage: ApiUsage;
+}
+
+/** The priced-or-not responses of a transcript: assistant records with a model and usage. A model like `<synthetic>` is no response. */
+export function weekEntries(records: Rec[]): WeekEntry[] {
+  const out: WeekEntry[] = [];
+  for (const o of records) {
+    const m = o.message;
+    const key = m?.id ?? o.uuid;
+    const at = time(o);
+    if (o.type !== 'assistant' || !m?.usage || typeof m.model !== 'string' || m.model.startsWith('<') || typeof key !== 'string' || Number.isNaN(at)) continue;
+    out.push({ key, at, model: m.model, usage: m.usage });
+  }
+  return out;
+}
+
+/** Sums entries inside [since, until] by model. `seen` holds the message ids already counted, so a message repeated in another file counts once. */
+export function addWeek(models: Map<string, WeekModel>, seen: Set<string>, entries: WeekEntry[], since: number, until: number): void {
+  for (const e of entries) {
+    if (e.at < since || e.at > until || seen.has(e.key)) continue;
+    seen.add(e.key);
+    const row = models.get(e.model) ?? { model: e.model, messages: 0, input: 0, cacheCreate: 0, cacheRead: 0, output: 0, cost: 0 };
+    row.messages += 1;
+    row.input += e.usage.input_tokens ?? 0;
+    row.cacheCreate += e.usage.cache_creation_input_tokens ?? 0;
+    row.cacheRead += e.usage.cache_read_input_tokens ?? 0;
+    row.output += e.usage.output_tokens ?? 0;
+    row.cost += messageCost(e.model, e.usage);
+    models.set(e.model, row);
+  }
+}
+
+/** Costliest model first. */
+export function weekTotal(account: Account, models: Map<string, WeekModel>, until: number): WeekTotal {
+  const rows = [...models.values()].sort((a, b) => b.cost - a.cost || b.messages - a.messages || a.model.localeCompare(b.model));
+  const cost = rows.reduce((n, r) => n + r.cost, 0);
+  const limit = planLimit(account.plan);
+  return {
+    account: account.label,
+    plan: account.plan,
+    limit,
+    since: until - WEEK_MS,
+    until,
+    models: rows,
+    cost,
+    tokens: rows.reduce((n, r) => n + r.input + r.cacheCreate + r.cacheRead + r.output, 0),
+    share: limit > 0 ? cost / limit : undefined,
+  };
+}
+
+const weekFiles = new Map<string, { mtime: number; size: number; entries: WeekEntry[] }>();
+
+/** The transcripts of an account touched since `since`: every repo's sessions and their agents' files. */
+function transcriptFiles(root: string, since: number): string[] {
+  const projects = path.join(root, 'projects');
+  const files: string[] = [];
+  const add = (file: string) => {
+    try {
+      if (fs.statSync(file).mtimeMs >= since) files.push(file);
+    } catch {
+      // gone while reading
+    }
+  };
+  for (const repo of readdir(projects)) {
+    const folder = path.join(projects, repo);
+    for (const name of readdir(folder)) {
+      if (name.endsWith('.jsonl')) add(path.join(folder, name));
+      else for (const f of readdir(path.join(folder, name, 'subagents'))) if (f.endsWith('.jsonl')) add(path.join(folder, name, 'subagents', f));
+    }
+  }
+  return files.sort();
+}
+
+/** The last 7 days of one account by model. Reads transcripts touched in that window only, and keeps what it read per file until the file changes. */
+export async function accountWeek(account: Account, now = Date.now()): Promise<WeekTotal> {
+  const models = new Map<string, WeekModel>();
+  const seen = new Set<string>();
+  for (const file of transcriptFiles(account.root, now - WEEK_MS)) {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.stat(file);
+    } catch {
+      continue;
+    }
+    let cached = weekFiles.get(file);
+    if (!cached || cached.mtime !== stat.mtimeMs || cached.size !== stat.size) {
+      cached = { mtime: stat.mtimeMs, size: stat.size, entries: weekEntries(await readRecords(file).catch(() => [])) };
+      weekFiles.set(file, cached);
+    }
+    addWeek(models, seen, cached.entries, now - WEEK_MS, now);
+  }
+  return weekTotal(account, models, now);
+}
+
 /** Finds a session of the repo, or a headless child of one, by id, in any account. */
 export function findAccountSession(dir: string, accounts: Account[], id: string): SessionSummary | undefined {
   for (const a of accounts) {
