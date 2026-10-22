@@ -16,5 +16,6 @@
 | 2026-10-20 | 0.25 | 23:34 | 23:55 | Versions 0.2.5 and 0.2.6: repository sorting and clearer parallel-work charts |
 | 2026-10-20 | 0.07 | 23:55 | 23:59 | Versions 0.2.7 and 0.2.8: delegation map switch between a summary by agent type and every run |
 | 2026-10-21 | 0.30 | 00:00 | 00:18 | Versions 0.2.9 to 0.2.12: delegation map as a top-to-bottom process with the same facts on every agent, and a full-width summary |
+| 2026-10-21 | 1.08 | 08:48 | 09:53 | Versions 0.2.14 to 0.2.23: session cost as a share of each Claude plan's weekly limit, output style drafts with Claude, session export and import, and one tooltip style |
 
-**Total: 10.40h**
+**Total: 11.48h**

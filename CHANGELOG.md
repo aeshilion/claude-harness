@@ -1,11 +1,14 @@
 # Changelog
 
-All notable changes to Claude Harness are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions with no version change in the package.json history (0.1.3, 0.1.5 to 0.1.18, 0.1.20 to 0.1.24, 0.1.27, 0.2.1 and 0.2.3 to 0.2.11) have no entry.
+All notable changes to Claude Harness are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions with no version change in the package.json history (0.1.3, 0.1.5 to 0.1.18, 0.1.20 to 0.1.24, 0.1.27, 0.2.1 and 0.2.3 to 0.2.11) and development builds (0.2.14 to 0.2.22 and 0.2.24 to 0.2.30) have no entry.
 
-## [0.2.25] - 2026-10-22
+## [0.2.32] - 2026-10-22
 
 ### Added
 
+- The Billing switch on the session page lists Pro and Team Standard next to Max 5x, Max 20x, Team Premium and API billing. Both new limits are derived estimates, one fifth of Max 5x and of Team Premium. A Team plan adds a note that Claude Code's status line carries no rate limits for it. See [Sessions](docs/sessions.md#session-page).
+- The settings `claudeHarness.plan` and `claudeHarness.accounts` set the plan of each Claude account, and list more config folders (`CLAUDE_CONFIG_DIR`) on one machine. The sessions of every account are listed together, each labeled with its account, and the cost row starts on the account's plan. Default is empty, which changes nothing. See [Settings](docs/settings.md#several-accounts).
+- The sessions page opens with the last 7 days of each account: tokens and cost at API list prices per model, over all repos and agents, and the share of the plan's estimated weekly limit when a plan is set. See [Sessions](docs/sessions.md#last-7-days).
 - The settings `claudeHarness.weekStart` and a `weekStart` per account (`Mon 11:00`, UTC) align the weekly summary to the plan's reset. It then counts since the last reset and its heading says Since. Empty keeps the rolling 7 days. See [Settings](docs/settings.md#several-accounts).
 - Model rows of the weekly summary say `of limit` for the share, and show dollars when no plan is set.
 - A plan can carry a limit for one model family. Team Premium and Team Standard get a Fable line, as a share of their own limit (about $215 and $43), estimated from the same single measurement. See [Sessions](docs/sessions.md#last-7-days).
@@ -14,13 +17,39 @@ All notable changes to Claude Harness are listed here, newest first. The format 
 
 - The Team Premium weekly limit is 1010 $ at API list prices, up from 861 $, and Team Standard 202 $. Measured against the Claude app's usage card on one Team Premium seat, 2026-10-22; one sample, still an estimate. See [Sessions](docs/sessions.md#session-page).
 
-## [0.2.24] - 2026-10-22
+## [0.2.31] - 2026-10-22
 
 ### Added
 
-- The Billing switch on the session page lists Pro and Team Standard next to Max 5x, Max 20x, Team Premium and API billing. Both new limits are derived estimates, one fifth of Max 5x and of Team Premium. A Team plan adds a note that Claude Code's status line carries no rate limits for it. See [Sessions](docs/sessions.md#session-page).
-- The settings `claudeHarness.plan` and `claudeHarness.accounts` set the plan of each Claude account, and list more config folders (`CLAUDE_CONFIG_DIR`) on one machine. The sessions of every account are listed together, each labeled with its account, and the cost row starts on the account's plan. Default is empty, which changes nothing. See [Settings](docs/settings.md#several-accounts).
-- The sessions page opens with the last 7 days of each account: tokens and cost at API list prices per model, over all repos and agents, and the share of the plan's estimated weekly limit when a plan is set. See [Sessions](docs/sessions.md#last-7-days).
+- Type pages for every kind of harness element. A click on a section in the sidebar, or on a tile of the overview or a repo page, lists every element of that kind in a table instead of opening the first one. The search filters as you type; quick filters with counts (such as Restricted tools, From plugins, Changed this week and Has copies) and field filters (Tool, Model, Color, Source, Plugin, Marketplace, Event, Scope) narrow the list. Typing `tool:` in the search lists the tools to pick from. The scope you came from is a removable filter. The chevron still folds the list in the sidebar.
+- Repo page tabs: Overview, Effective harness and Sessions. Overview shows sessions, agents launched, what every session loads, copies, the harness by kind, recently changed elements and the harness standard. Effective harness lists memory with its imports, rules, plugins switched on for user, project and local, and hooks.
+- Grouped lists in the sidebar and on the type pages, with a View: picker and collapsible group headers. MCP servers group by origin (Registered manually, claude.ai connectors, From plugins), skills into Own skills, Linked and From plugins, agents into Own agents and From plugins, rules into Always loaded and Path-scoped, hooks by event, plugins by marketplace, and a repo's sessions by day.
+- Skills of enabled plugins appear in the global Skills list, read-only, the way plugin agents already do.
+- Duplicate MCP servers are flagged, for example a server registered both as a claude.ai connector and in `~/.claude.json`, or by several plugins.
+- View mode for detail pages, beside Edit. A summary card shows the description, trigger phrases and example tasks as chips, and the frontmatter in words. Tiles show what the element costs in context: its description in every session and its body when it runs. The body renders as a document with an outline. Side cards show tools grouped by MCP server, preloaded skills, files, what the element mentions and what mentions it.
+- Names of skills, agents and commands in a document link to them. Hovering or focusing one shows a card with its origin, description and key numbers; a click opens it and adds a Back button, and Alt+click opens its file. A skill's own files named in the text open in the editor.
+- View mode for MCP servers: where it is registered, status, its tools with descriptions and the tokens the tool list costs. View mode for plugins: the skills, agents and MCP servers the plugin adds.
+- The harness standard card on the repo page says in plain words what the provider found, lists the findings to fix, to review and to note with links to the file and line, offers the fixes that apply, and shows the provider's standard document.
+
+### Changed
+
+- The MCP Servers sort picker is now View: and starts on source. On the MCP page, Source names the config file, claude.ai or the plugin, and Status is one word with the full text in its hover card.
+- A skill row in the sidebar shows facts under its name (plugin, link, version, file count, copies) instead of its description.
+- Hover cards in the sidebar stop at a quarter of the window height and fade out where the text is cut. Skill, agent and command cards leave out trigger phrases.
+- Sidebar headers line up in columns: every count has the same width, with the buttons to its left.
+- With unsaved edits, View mode shows them as a preview; Save and Revert stay available.
+
+## [0.2.23] - 2026-10-21
+
+### Added
+
+- Billing picker on the session page's cost card: Max 5x, Max 20x, Team Premium or API billing. A plan shows the session as a share of its weekly limit, marked with a `*` because the limits are third-party estimates.
+- Output style section on the session page: prompts, corrections, interrupts, reply lengths and how many replies used headings, tables or lists. Draft output style asks first, then lets your own Claude Code draft a style for the repo with the model you pick.
+- Export a session transcript as JSONL, and import one into a repo so `claude --resume` finds it there.
+
+### Changed
+
+- Every hint in the main window shows as a hover card in the panel's style instead of the browser's tooltip.
 
 ## [0.2.13] - 2026-10-21
 

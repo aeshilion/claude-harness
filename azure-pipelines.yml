@@ -1,13 +1,11 @@
-# Packages claude-harness; publishes to the Visual Studio Marketplace only when run with publish=true.
-# Authenticates through sc-vscode-marketplace (workload identity federation, no PAT).
-trigger: none
+# Packages claude-harness on every run; publishes to the Visual Studio Marketplace only from the deploy branch.
+# Authenticates through sc-vscode-marketplace (workload identity federation, no PAT). A branch control check
+# on that connection allows refs/heads/deploy only, so the publish step is compiled in for deploy runs alone.
+trigger:
+  branches:
+    include:
+      - deploy
 pr: none
-
-parameters:
-  - name: publish
-    displayName: Publish to the Visual Studio Marketplace
-    type: boolean
-    default: false
 
 pool:
   vmImage: ubuntu-latest
@@ -24,17 +22,12 @@ steps:
   - script: npm install -g @vscode/vsce
     displayName: Install vsce
 
-  - task: AzureCLI@2
+  - script: |
+      vsce --version
+      vsce package
     displayName: Package
-    inputs:
-      azureSubscription: sc-vscode-marketplace
-      scriptType: bash
-      scriptLocation: inlineScript
-      inlineScript: |
-        vsce --version
-        vsce package
 
-  - ${{ if eq(parameters.publish, true) }}:
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/deploy') }}:
       - task: AzureCLI@2
         displayName: Publish to the Marketplace
         inputs:

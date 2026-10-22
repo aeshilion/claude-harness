@@ -5,15 +5,11 @@ import { Asset, Field, ScopeView, fromFields, globalScope, kindInfo, mcpToken, r
 import { McpInfo, StdioConfig, probeHttp, probeStdio } from './probe';
 import type { CheckSummary } from './constitution';
 import type { ScaffoldForm } from './standard';
+import type { SessionSummary } from './sessions';
+import type { Detail, Page, Pending, Standard, StyleDraft, ToHost, ToWebview } from './shared/messages';
 import { pickTools, splitTools } from './tools';
 
-export interface Detail {
-  asset: Asset;
-  mode: 'markdown' | 'code' | 'settings' | 'json' | 'plugin' | 'mcp';
-  fields: Field[];
-  knownFields: string[];
-  body: string;
-}
+export type { Detail, Page } from './shared/messages';
 
 const colorBelowTools = (fields: Field[]): Field[] => {
   const color = fields.find(f => f.key === 'color');
@@ -24,40 +20,12 @@ const colorBelowTools = (fields: Field[]): Field[] => {
   return rest;
 };
 
-interface Pending {
-  id: string;
-  fields: Field[];
-  body: string;
-}
-
-type Message =
-  | { type: 'ready' }
-  | { type: 'select'; id?: string; pending?: Pending }
-  | { type: 'save'; pending: Pending }
-  | { type: 'configureTools'; id: string; key: string; value: string }
-  | { type: 'mcpSignIn'; id: string }
-  | { type: 'mcpRetry'; id: string }
-  | { type: 'command'; command: string; id?: string; kind?: string; scope?: string; rel?: string; market?: string }
-  | { type: 'fleet' }
-  | { type: 'effective'; scope: string }
-  | { type: 'ruleInfo'; id: string }
-  | { type: 'marketplaces' }
-  | { type: 'initForm'; dir: string }
-  | { type: 'initRun'; dir: string; form: ScaffoldForm; apply: boolean }
-  | { type: 'sessions'; scope: string }
-  | { type: 'weekly' }
-  | { type: 'session'; scope: string; id: string }
-  | { type: 'draftStyle'; scope: string; id: string; model: string }
-  | { type: 'exportSession'; scope: string; id: string }
-  | { type: 'importSession'; scope: string }
-  | { type: 'openAt'; file: string; line?: number };
-
 export interface PanelHost {
   views(): ScopeView[];
   find(id: string): Asset | undefined;
   refresh(): void;
   checks?(): Record<string, CheckSummary>;
-  standard?(): { name: string; fix: boolean; scaffold: boolean; align: boolean; owner: boolean } | undefined;
+  standard?(): Standard | undefined;
   ensureChecks?(scopeIds: string[]): void;
   fleet?(): unknown;
   effective?(scopeId: string): unknown;
@@ -65,18 +33,16 @@ export interface PanelHost {
   marketplaces?(): unknown;
   initForm?(dir: string): Promise<unknown>;
   initRun?(dir: string, form: ScaffoldForm, apply: boolean): Promise<unknown>;
-  sessions?(scopeId: string): unknown;
+  sessions?(scopeId: string): SessionSummary[];
   session?(scopeId: string, id: string): Promise<unknown>;
   /** The last 7 days of every account by model, over all repos. */
   weekly?(): Promise<unknown>;
   /** Asks first, then drafts an output style from the session's style scan; `started` fires once the user agreed. */
-  draftStyle?(scopeId: string, id: string, model: string, started: () => void): Promise<{ state: 'idle' } | { state: 'done'; file: string; cost?: number } | { state: 'error'; error: string }>;
+  draftStyle?(scopeId: string, id: string, model: string, started: () => void): Promise<StyleDraft>;
   exportSession?(scopeId: string, id: string): Promise<void>;
   /** Picks a transcript and copies it into the repo; returns the session id, or nothing when cancelled or failed. */
   importSession?(scopeId: string): Promise<string | undefined>;
 }
-
-export type Page = { page?: string; repo?: string; dir?: string; session?: string };
 
 export class HarnessPanel {
   private static current: HarnessPanel | undefined;
@@ -110,7 +76,7 @@ export class HarnessPanel {
     HarnessPanel.current!.post({ type: 'page', ...page });
   }
 
-  static post(message: unknown): void {
+  static post(message: ToWebview): void {
     HarnessPanel.current?.post(message);
   }
 
@@ -124,10 +90,10 @@ export class HarnessPanel {
     panel.webview.html = this.html();
     panel.onDidDispose(() => (HarnessPanel.current = undefined));
     panel.onDidChangeViewState(e => e.webviewPanel.visible && host.refresh());
-    panel.webview.onDidReceiveMessage((m: Message) => this.receive(m));
+    panel.webview.onDidReceiveMessage((m: ToHost) => this.receive(m));
   }
 
-  private post(message: unknown): void {
+  private post(message: ToWebview): void {
     void this.panel.webview.postMessage(message);
   }
 
@@ -237,7 +203,7 @@ export class HarnessPanel {
     }
   }
 
-  private async receive(m: Message): Promise<void> {
+  private async receive(m: ToHost): Promise<void> {
     switch (m.type) {
       case 'ready':
         this.postState();
@@ -318,7 +284,7 @@ export class HarnessPanel {
         return;
       }
       case 'draftStyle': {
-        const reply = (data: object) => this.post({ type: 'styleDraft', scope: m.scope, id: m.id, ...data });
+        const reply = (data: StyleDraft) => this.post({ type: 'styleDraft', scope: m.scope, id: m.id, ...data });
         try {
           reply((await this.host.draftStyle?.(m.scope, m.id, m.model, () => reply({ state: 'running', model: m.model }))) ?? { state: 'idle' });
         } catch (e) {

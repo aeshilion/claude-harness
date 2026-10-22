@@ -7,8 +7,8 @@ import { projectSlug } from '../../src/fleet';
 import { PLANS, WEEK_MS, accountWeek, lastReset, parseWeekStart, addWeek, findAccountSession, listAccountSessions, listSessions, messageCost, parseAccounts, planLimit, weekEntries, WeekModel } from '../../src/sessions';
 
 test('PLANS matches the BILLING table of the panel, ids, labels and figures', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'media', 'panel.js'), 'utf8');
-  const table = /const BILLING = \[([\s\S]*?)\n  \];/.exec(source)?.[1] ?? '';
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'webview', 'session-page.ts'), 'utf8');
+  const table = /export const BILLING = \[([\s\S]*?)\n\];/.exec(source)?.[1] ?? '';
   const rows = [...table.matchAll(/\['([^']+)', '([^']+)', '[^']+', (\d+)\]/g)].map(m => ({ id: m[1], label: m[2], limit: Number(m[3]) }));
   assert.deepEqual(rows, PLANS.map(({ id, label, limit }) => ({ id, label, limit })));
   assert.equal(PLANS[PLANS.length - 1].id, 'api', 'api stays last: the panel falls back to the last row');
@@ -63,6 +63,8 @@ function twoAccounts() {
     const file = path.join(root, 'projects', projectSlug(repo), `${id}.jsonl`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ type: 'user', timestamp: at, sessionId: id, message: { role: 'user', content: `prompt of ${name}` } }) + '\n');
+    // A session ends at its file's mtime; two files written in the same millisecond would tie.
+    fs.utimesSync(file, new Date(at), new Date(at));
     return root;
   };
   const a = make('.claude', '11111111-2222-3333-4444-555555555555', '2026-10-20T10:00:00.000Z');
