@@ -73,6 +73,40 @@
           "default": [],
           "markdownDescription": "Repo folders hidden with **Remove Repo...**. Adding the repo or its parent folder again shows it again.",
           "order": 3
+        },
+        "claudeHarness.plan": {
+          "type": "string",
+          "enum": ["", "pro", "max5", "max20", "team-standard", "team", "api"],
+          "enumItemLabels": ["Not set", "Pro", "Max 5x", "Max 20x", "Team Standard", "Team Premium", "API billing"],
+          "default": "",
+          "markdownDescription": "The plan of the Claude account in the global harness folder. The session cost then starts on that plan's weekly limit estimate. Empty means no plan.",
+          "order": 4
+        },
+        "claudeHarness.accounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Name shown on the sessions of this account. Defaults to the folder name."
+              },
+              "path": {
+                "type": "string",
+                "description": "The Claude config folder of the account, the one Claude Code reads from `CLAUDE_CONFIG_DIR`. A leading `~` is the home folder."
+              },
+              "plan": {
+                "type": "string",
+                "enum": ["", "pro", "max5", "max20", "team-standard", "team", "api"],
+                "enumItemLabels": ["Not set", "Pro", "Max 5x", "Max 20x", "Team Standard", "Team Premium", "API billing"],
+                "description": "The plan of this account."
+              }
+            },
+            "required": ["path"]
+          },
+          "default": [],
+          "markdownDescription": "More Claude accounts on this machine, each with its own config folder, for example `~/.claude-work`. Sessions of every account are listed, labeled with the account. The global harness folder stays the main account, labeled Default.",
+          "order": 5
         }
       }
     },

@@ -8,7 +8,7 @@
 </tr>
 </table>
 
-Three VS Code settings control what Claude Harness lists. Find them under **Claude Harness** in the Settings editor. The two repo lists are stored in your user settings. Use **Add Repo** and **Remove Repo** to change them, because those commands update the settings for you.
+Five VS Code settings control what Claude Harness lists. Find them under **Claude Harness** in the Settings editor. The two repo lists are stored in your user settings. Use **Add Repo** and **Remove Repo** to change them, because those commands update the settings for you.
 
 | Setting | What it does | Default |
 | --- | --- | --- |
@@ -16,7 +16,24 @@ Three VS Code settings control what Claude Harness lists. Find them under **Clau
 | `claudeHarness.repoFolders` | Folders added with **Add Repo**. Each is a repo folder or a parent folder. | `[]` |
 | `claudeHarness.removedRepos` | Repo folders hidden with **Remove Repo**. Adding the repo or its parent folder again shows it. | `[]` |
 
+| `claudeHarness.plan` | The plan of the account in the global harness folder: Pro, Max 5x, Max 20x, Team Standard, Team Premium or API billing. | Empty |
+| `claudeHarness.accounts` | More Claude accounts on this machine, each `{ "label", "path", "plan" }`. | `[]` |
+
 Changing `claudeHarness.root` reloads the global harness from the new folder, and the new folder is watched for changes.
+
+### Several accounts
+
+Claude Code reads its config folder from `CLAUDE_CONFIG_DIR`, so a machine with two seats can keep `~/.claude` and `~/.claude-work`. List each extra folder in `claudeHarness.accounts`:
+
+```json
+"claudeHarness.accounts": [
+  { "label": "Work", "path": "~/.claude-work", "plan": "team-standard" }
+]
+```
+
+`path` is required, and a leading `~` is your home folder. The label defaults to the folder name, and an unknown plan counts as none. The main account, from `claudeHarness.root`, is labeled **Default**; give it a plan with `claudeHarness.plan`. A folder that repeats an earlier one is ignored. With the list empty nothing changes. Only the sessions come from the extra folders: the harness items you edit still come from the main folder.
+
+With more than one account, each session in the tree, the sessions page and the session header shows the label of its account, and the cost row starts on that account's plan. See [Sessions](sessions.md#several-accounts).
 
 See [Repositories](repositories.md) for how the two repo lists are used.
 

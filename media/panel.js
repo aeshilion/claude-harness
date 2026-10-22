@@ -1245,6 +1245,7 @@
   const AGENT_STATUS = { running: 'running', done: 'reported back', stopped: 'stopped', failed: 'failed', unknown: 'never reported back' };
   const sessionDesc = s =>
     [
+      s.account || '',
       s.start ? fmtDate(s.start) : '',
       s.start ? fmtDur(s.end - s.start) : '',
       s.agents ? `${s.agents} ${s.agents === 1 ? 'agent' : 'agents'}` : '',
@@ -3142,7 +3143,7 @@
     hideHover();
     if (!d || d.error)
       return el('section', { className: 'main' }, pageHead('type-hierarchy-sub', 'Session', view ? view.label : '', back, reload), el('div', { className: 'main-body' }, el('div', { className: 'empty flush' }, d ? d.error : 'Reading the transcript...')));
-    const sub = [d.repo, d.start ? `${fmtDate(d.start)} to ${fmtTime(d.end)}` : '', d.start ? fmtDur(d.end - d.start) : '', d.branch, shortModel(d.model), d.live].filter(Boolean).join(' · ');
+    const sub = [d.repo, d.account, d.start ? `${fmtDate(d.start)} to ${fmtTime(d.end)}` : '', d.start ? fmtDur(d.end - d.start) : '', d.branch, shortModel(d.model), d.live].filter(Boolean).join(' · ');
     const colors = colorsOf(d);
     const usages = [d.usage, ...d.agents.map(a => a.usage)];
     const sum = key => usages.reduce((n, u) => n + (u[key] || 0), 0);

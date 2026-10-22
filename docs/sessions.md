@@ -14,6 +14,7 @@ Claude Harness lists the Claude Code sessions that ran in each repo. A session p
 | --- | --- |
 | [Sessions in the tree](#sessions-in-the-tree) | The session rows under each repo in the activity bar |
 | [Sessions page](#sessions-page) | The search box, its suggestions, filters and chips |
+| [Several accounts](#several-accounts) | Sessions of more than one Claude config folder |
 | [Session page](#session-page) | The header, the cost, the four KPIs and the agent details |
 | [Delegation views](#delegation-views) | The six views of how the work was delegated |
 | [Hover cards](#hover-cards) | The cards for agents, the main thread and repos |
@@ -43,6 +44,10 @@ The Sessions page has one search box. Suggestions appear when you focus it, and 
 A chosen filter becomes a chip. Press Backspace in an empty box to remove the last chip. Press Esc to clear the text and all chips. Matches are highlighted in the results.
 
 ![Sessions page with the search box and its suggestions](images/sessions-search.png)
+
+## Several accounts
+
+When `claudeHarness.accounts` lists more than one Claude config folder, the sessions of every account are listed together, newest first, and each session shows the label of its account before its date. The session header shows it too, and the **Billing** switch of the cost row starts on the plan set for that account. See [Settings](settings.md#several-accounts) for the setting. With one account, nothing is labeled.
 
 ## Session page
 

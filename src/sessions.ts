@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { projectSlug } from './fleet';
 
@@ -83,6 +84,9 @@ export interface SessionSummary {
   branch?: string;
   headless: boolean;
   live?: string;
+  /** Label and config folder of the account the session ran under; set only when more than one account is configured. */
+  account?: string;
+  accountRoot?: string;
   children: SessionSummary[];
 }
 
@@ -398,6 +402,59 @@ export function listSessions(dir: string, root: string): SessionSummary[] {
   }
   for (const s of own) s.children.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
   return own.sort((a, b) => b.end - a.end);
+}
+
+/** A Claude config folder with the plan of the seat that uses it. Claude Code reads another one from `CLAUDE_CONFIG_DIR`. */
+export interface Account {
+  label: string;
+  root: string;
+  /** An id of PLANS. */
+  plan?: string;
+}
+
+const expandHome = (p: string, home: string) => (p === '~' ? home : /^~[\\/]/.test(p) ? path.join(home, p.slice(2)) : p);
+const samePlace = (a: string, b: string) => {
+  const norm = (p: string) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+  return norm(a) === norm(b);
+};
+
+/**
+ * The accounts to read: the main config folder first, then each entry of the `claudeHarness.accounts` setting.
+ * Entries without a path, with a path that repeats an earlier one, or that are not objects are dropped; an
+ * unknown plan becomes none and a missing label becomes the folder name. With no extra entry the list is just the main one.
+ */
+export function parseAccounts(mainRoot: string, mainPlan: string | undefined, raw: unknown, home = os.homedir()): Account[] {
+  const known = (plan: unknown) => (typeof plan === 'string' && PLANS.some(p => p.id === plan) ? plan : undefined);
+  const accounts: Account[] = [{ label: 'Default', root: mainRoot, plan: known(mainPlan) }];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const p = typeof entry.path === 'string' ? entry.path.trim() : '';
+    if (!p) continue;
+    const root = expandHome(p, home);
+    if (accounts.some(a => samePlace(a.root, root))) continue;
+    const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : path.basename(path.resolve(root)) || root;
+    accounts.push({ label, root, plan: known(entry.plan) });
+  }
+  return accounts;
+}
+
+/**
+ * The sessions of a repo in every account, newest first. With more than one account each session, and each
+ * headless child, carries its account label and folder; with one account the list equals `listSessions`.
+ */
+export function listAccountSessions(dir: string, accounts: Account[]): SessionSummary[] {
+  if (accounts.length === 1) return listSessions(dir, accounts[0].root);
+  const tag = (s: SessionSummary, a: Account): SessionSummary => ({ ...s, account: a.label, accountRoot: a.root, children: s.children.map(c => tag(c, a)) });
+  return accounts.flatMap(a => listSessions(dir, a.root).map(s => tag(s, a))).sort((x, y) => y.end - x.end);
+}
+
+/** Finds a session of the repo, or a headless child of one, by id, in any account. */
+export function findAccountSession(dir: string, accounts: Account[], id: string): SessionSummary | undefined {
+  for (const a of accounts) {
+    const hit = findSession(dir, a.root, id);
+    if (hit) return accounts.length === 1 ? hit : { ...hit, account: a.label, accountRoot: a.root };
+  }
+  return undefined;
 }
 
 /** Finds a session of the repo, or a headless child of one, by id. */
