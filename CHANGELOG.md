@@ -4,6 +4,12 @@ All notable changes to Claude Harness are listed here, newest first. The format 
 
 ## [0.2.25] - 2026-10-22
 
+### Added
+
+- The settings `claudeHarness.weekStart` and a `weekStart` per account (`Mon 11:00`, UTC) align the weekly summary to the plan's reset. It then counts since the last reset and its heading says Since. Empty keeps the rolling 7 days. See [Settings](docs/settings.md#several-accounts).
+- Model rows of the weekly summary say `of limit` for the share, and show dollars when no plan is set.
+- A plan can carry a limit for one model family. Team Premium and Team Standard get a Fable line, as a share of their own limit (about $215 and $43), estimated from the same single measurement. See [Sessions](docs/sessions.md#last-7-days).
+
 ### Changed
 
 - The Team Premium weekly limit is 1010 $ at API list prices, up from 861 $, and Team Standard 202 $. Measured against the Claude app's usage card on one Team Premium seat, 2026-10-22; one sample, still an estimate. See [Sessions](docs/sessions.md#session-page).

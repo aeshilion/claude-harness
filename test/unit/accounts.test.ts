@@ -4,13 +4,13 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import * as os from 'node:os';
 import { projectSlug } from '../../src/fleet';
-import { PLANS, WEEK_MS, accountWeek, addWeek, findAccountSession, listAccountSessions, listSessions, messageCost, parseAccounts, planLimit, weekEntries, WeekModel } from '../../src/sessions';
+import { PLANS, WEEK_MS, accountWeek, lastReset, parseWeekStart, addWeek, findAccountSession, listAccountSessions, listSessions, messageCost, parseAccounts, planLimit, weekEntries, WeekModel } from '../../src/sessions';
 
 test('PLANS matches the BILLING table of the panel, ids, labels and figures', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'media', 'panel.js'), 'utf8');
   const table = /const BILLING = \[([\s\S]*?)\n  \];/.exec(source)?.[1] ?? '';
   const rows = [...table.matchAll(/\['([^']+)', '([^']+)', '[^']+', (\d+)\]/g)].map(m => ({ id: m[1], label: m[2], limit: Number(m[3]) }));
-  assert.deepEqual(rows, PLANS);
+  assert.deepEqual(rows, PLANS.map(({ id, label, limit }) => ({ id, label, limit })));
   assert.equal(PLANS[PLANS.length - 1].id, 'api', 'api stays last: the panel falls back to the last row');
 });
 
@@ -26,8 +26,8 @@ test('an unknown or missing plan has no limit', () => {
 });
 
 test('parseAccounts with no setting is the main folder alone', () => {
-  assert.deepEqual(parseAccounts('/h/.claude', undefined, undefined, '/h'), [{ label: 'Default', root: '/h/.claude', plan: undefined }]);
-  assert.deepEqual(parseAccounts('/h/.claude', 'team', [], '/h'), [{ label: 'Default', root: '/h/.claude', plan: 'team' }]);
+  assert.deepEqual(parseAccounts('/h/.claude', undefined, undefined, '/h'), [{ label: 'Default', root: '/h/.claude', plan: undefined, weekStart: undefined }]);
+  assert.deepEqual(parseAccounts('/h/.claude', 'team', [], '/h'), [{ label: 'Default', root: '/h/.claude', plan: 'team', weekStart: undefined }]);
 });
 
 test('parseAccounts expands ~, defaults the label, and drops bad entries and repeats', () => {
@@ -47,9 +47,9 @@ test('parseAccounts expands ~, defaults the label, and drops bad entries and rep
     '/h'
   );
   assert.deepEqual(list, [
-    { label: 'Default', root: '/h/.claude', plan: undefined },
-    { label: '.claude-work', root: path.join('/h', '.claude-work'), plan: 'team-standard' },
-    { label: 'Side', root: '/x/side', plan: undefined },
+    { label: 'Default', root: '/h/.claude', plan: undefined, weekStart: undefined },
+    { label: '.claude-work', root: path.join('/h', '.claude-work'), plan: 'team-standard', weekStart: undefined },
+    { label: 'Side', root: '/x/side', plan: undefined, weekStart: undefined },
   ]);
   assert.deepEqual(parseAccounts('/m', undefined, 'not an array', '/h').length, 1);
 });
@@ -161,4 +161,63 @@ test('accountWeek sums every repo and the agent files of an account, as a share 
   assert.equal(week.limit, planLimit('team-standard'));
   assert.ok(Math.abs((week.share ?? 0) - cost / planLimit('team-standard')) < 1e-9);
   assert.equal((await accountWeek({ label: 'Plain', root }, NOW)).share, undefined);
+});
+
+test('Team Premium is the measured 1010 and Standard a fifth of it, with Fable limits', () => {
+  assert.equal(planLimit('team'), 1010);
+  assert.equal(planLimit('team-standard'), 202);
+  assert.deepEqual(PLANS.find(p => p.id === 'team')?.families, { fable: 215 });
+  assert.deepEqual(PLANS.find(p => p.id === 'team-standard')?.families, { fable: 43 });
+});
+
+test('parseWeekStart reads weekday and UTC hour, and refuses the rest', () => {
+  assert.deepEqual(parseWeekStart('Mon 11:00'), { day: 1, hour: 11, minute: 0 });
+  assert.deepEqual(parseWeekStart(' sunday 9 '), { day: 0, hour: 9, minute: 0 });
+  assert.deepEqual(parseWeekStart('Fri 23:59'), { day: 5, hour: 23, minute: 59 });
+  for (const bad of ['', 'Mon', 'Mon 24:00', 'Mon 11:60', 'Xyz 11:00', '11:00 Mon', undefined, 5]) assert.equal(parseWeekStart(bad), undefined, String(bad));
+});
+
+test('lastReset is the latest reset at or before now, one second either side of the hour', () => {
+  const reset = Date.parse('2026-10-19T11:00:00.000Z');
+  assert.equal(lastReset('Mon 11:00', Date.parse('2026-10-22T12:00:00.000Z')), reset);
+  assert.equal(lastReset('Mon 11:00', reset), reset);
+  assert.equal(lastReset('Mon 11:00', reset - 1000), reset - WEEK_MS);
+  assert.equal(lastReset('Mon 11:00', reset + 1000), reset);
+  assert.equal(lastReset('Thu 12:00', Date.parse('2026-10-22T12:00:00.000Z')), Date.parse('2026-10-22T12:00:00.000Z'));
+  assert.equal(lastReset('Thu 12:30', Date.parse('2026-10-22T12:00:00.000Z')), Date.parse('2026-10-15T12:30:00.000Z'));
+  assert.equal(lastReset(undefined, NOW), undefined);
+  assert.equal(lastReset('nonsense', NOW), undefined);
+});
+
+test('parseAccounts keeps a valid weekStart and drops an invalid one', () => {
+  const list = parseAccounts('/h/.claude', undefined, [{ path: '/a', weekStart: ' Mon 11:00 ' }, { path: '/b', weekStart: 'whenever' }], '/h', 'Tue 8:00');
+  assert.deepEqual(list.map(a => a.weekStart), ['Tue 8:00', 'Mon 11:00', undefined]);
+  assert.equal(parseAccounts('/h/.claude', undefined, undefined, '/h')[0].weekStart, undefined);
+});
+
+test('accountWeek with a weekStart sums since the reset and reports the Fable share of its own limit', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-reset-'));
+  const root = path.join(tmp, '.claude');
+  const file = path.join(root, 'projects', 'repo', 's.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const reset = Date.parse('2026-10-19T11:00:00.000Z');
+  const usage = { output_tokens: 1_000_000 };
+  fs.writeFileSync(
+    file,
+    [reply('before', 'claude-opus-5-5', reset - 1000, usage), reply('after', 'claude-opus-5-5', reset + 1000, usage), reply('f', 'claude-fable-1', NOW - 1000, usage)].map(r => JSON.stringify(r)).join('\n') + '\n'
+  );
+  const week = await accountWeek({ label: 'Work', root, plan: 'team', weekStart: 'Mon 11:00' }, NOW);
+  assert.equal(week.fromReset, true);
+  assert.equal(week.since, reset);
+  assert.equal(week.models.find(m => m.model === 'claude-opus-5-5')?.messages, 1, 'the reply before the reset is left out');
+  const fableCost = messageCost('claude-fable-1', usage);
+  assert.ok(fableCost > 0);
+  assert.equal(week.families.length, 1);
+  assert.equal(week.families[0].family, 'fable');
+  assert.ok(Math.abs(week.families[0].share - fableCost / 215) < 1e-9);
+  const rolling = await accountWeek({ label: 'Work', root, plan: 'team' }, NOW);
+  assert.equal(rolling.fromReset, false);
+  assert.equal(rolling.since, NOW - WEEK_MS);
+  assert.equal(rolling.models.find(m => m.model === 'claude-opus-5-5')?.messages, 2);
+  assert.deepEqual((await accountWeek({ label: 'P', root, plan: 'max5' }, NOW)).families, []);
 });

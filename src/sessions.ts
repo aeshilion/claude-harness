@@ -39,14 +39,16 @@ const PRICES: [RegExp, { input: number; output: number; cacheRead: number }][] =
  * estimates (Max 5x, Max 20x) and one measured against the Claude app's usage card on one Team Premium seat, 2026-10-22
  * (56 % used = 566 $ at list prices, so about 1010 $; one sample, still an estimate). Two are derived: Pro is Max 5x / 5,
  * Team Standard is Team Premium / 5.
+ * `families` are weekly limits of one model family of its own (matched in the model id), valued the same way: Fable, from
+ * the same Team Premium measurement (46 % used = 99 $, so about 215 $), and a fifth of it for Team Standard.
  * Same ids and figures as BILLING in media/panel.js. `api` has no limit.
  */
-export const PLANS: { id: string; label: string; limit: number }[] = [
+export const PLANS: { id: string; label: string; limit: number; families?: Record<string, number> }[] = [
   { id: 'pro', label: 'Pro', limit: 105 },
   { id: 'max5', label: 'Max 5x', limit: 523 },
   { id: 'max20', label: 'Max 20x', limit: 1643 },
-  { id: 'team-standard', label: 'Team Standard', limit: 202 },
-  { id: 'team', label: 'Team Premium', limit: 1010 },
+  { id: 'team-standard', label: 'Team Standard', limit: 202, families: { fable: 43 } },
+  { id: 'team', label: 'Team Premium', limit: 1010, families: { fable: 215 } },
   { id: 'api', label: 'API billing', limit: 0 },
 ];
 
@@ -412,6 +414,30 @@ export interface Account {
   root: string;
   /** An id of PLANS. */
   plan?: string;
+  /** When the plan's weekly limit resets, as `Mon 11:00` in UTC. Unset means a rolling 7 days. */
+  weekStart?: string;
+}
+
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/** Reads `Mon 11:00` (weekday, UTC hour and optional minute; `Monday 9` also works). Anything else is undefined. */
+export function parseWeekStart(spec: unknown): { day: number; hour: number; minute: number } | undefined {
+  const m = typeof spec === 'string' ? /^([a-z]{3})[a-z]*\s+(\d{1,2})(?::(\d{2}))?$/i.exec(spec.trim()) : null;
+  if (!m) return undefined;
+  const day = DAYS.indexOf(m[1].toLowerCase());
+  const hour = Number(m[2]);
+  const minute = m[3] ? Number(m[3]) : 0;
+  return day < 0 || hour > 23 || minute > 59 ? undefined : { day, hour, minute };
+}
+
+/** The latest reset at or before `now`, in ms: the start of the current weekly window. Undefined for an unset or invalid spec. */
+export function lastReset(spec: string | undefined, now: number): number | undefined {
+  const w = parseWeekStart(spec);
+  if (!w) return undefined;
+  const d = new Date(now);
+  let at = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() - w.day + 7) % 7), w.hour, w.minute);
+  if (at > now) at -= WEEK_MS;
+  return at;
 }
 
 const expandHome = (p: string, home: string) => (p === '~' ? home : /^~[\\/]/.test(p) ? path.join(home, p.slice(2)) : p);
@@ -423,11 +449,12 @@ const samePlace = (a: string, b: string) => {
 /**
  * The accounts to read: the main config folder first, then each entry of the `claudeHarness.accounts` setting.
  * Entries without a path, with a path that repeats an earlier one, or that are not objects are dropped; an
- * unknown plan becomes none and a missing label becomes the folder name. With no extra entry the list is just the main one.
+ * unknown plan or week start becomes none and a missing label becomes the folder name. With no extra entry the list is just the main one.
  */
-export function parseAccounts(mainRoot: string, mainPlan: string | undefined, raw: unknown, home = os.homedir()): Account[] {
+export function parseAccounts(mainRoot: string, mainPlan: string | undefined, raw: unknown, home = os.homedir(), mainWeekStart?: string): Account[] {
   const known = (plan: unknown) => (typeof plan === 'string' && PLANS.some(p => p.id === plan) ? plan : undefined);
-  const accounts: Account[] = [{ label: 'Default', root: mainRoot, plan: known(mainPlan) }];
+  const start = (v: unknown) => (parseWeekStart(v) ? (v as string).trim() : undefined);
+  const accounts: Account[] = [{ label: 'Default', root: mainRoot, plan: known(mainPlan), weekStart: start(mainWeekStart) }];
   for (const entry of Array.isArray(raw) ? raw : []) {
     if (!entry || typeof entry !== 'object') continue;
     const p = typeof entry.path === 'string' ? entry.path.trim() : '';
@@ -435,7 +462,7 @@ export function parseAccounts(mainRoot: string, mainPlan: string | undefined, ra
     const root = expandHome(p, home);
     if (accounts.some(a => samePlace(a.root, root))) continue;
     const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : path.basename(path.resolve(root)) || root;
-    accounts.push({ label, root, plan: known(entry.plan) });
+    accounts.push({ label, root, plan: known(entry.plan), weekStart: start(entry.weekStart) });
   }
   return accounts;
 }
@@ -464,7 +491,7 @@ export interface WeekModel {
   cost: number;
 }
 
-/** What one account used in the 7 days before `until`, over every repo, agents included. */
+/** What one account used from `since` to `until` (the last 7 days, or since the plan's reset), over every repo, agents included. */
 export interface WeekTotal {
   account: string;
   plan?: string;
@@ -472,7 +499,11 @@ export interface WeekTotal {
   limit: number;
   since: number;
   until: number;
+  /** True when the window starts at the plan's last reset, false for a rolling 7 days. */
+  fromReset: boolean;
   models: WeekModel[];
+  /** Model families with a limit of their own on this plan, with what the account used of each. */
+  families: { family: string; cost: number; limit: number; share: number }[];
   cost: number;
   tokens: number;
   /** cost / limit; absent without a limit. */
@@ -517,7 +548,7 @@ export function addWeek(models: Map<string, WeekModel>, seen: Set<string>, entri
 }
 
 /** Costliest model first. */
-export function weekTotal(account: Account, models: Map<string, WeekModel>, until: number): WeekTotal {
+export function weekTotal(account: Account, models: Map<string, WeekModel>, since: number, until: number): WeekTotal {
   const rows = [...models.values()].sort((a, b) => b.cost - a.cost || b.messages - a.messages || a.model.localeCompare(b.model));
   const cost = rows.reduce((n, r) => n + r.cost, 0);
   const limit = planLimit(account.plan);
@@ -525,9 +556,14 @@ export function weekTotal(account: Account, models: Map<string, WeekModel>, unti
     account: account.label,
     plan: account.plan,
     limit,
-    since: until - WEEK_MS,
+    since,
     until,
+    fromReset: !!lastReset(account.weekStart, until),
     models: rows,
+    families: Object.entries(PLANS.find(p => p.id === account.plan)?.families ?? {}).map(([family, fl]) => {
+      const used = rows.filter(r => r.model.toLowerCase().includes(family)).reduce((n, r) => n + r.cost, 0);
+      return { family, cost: used, limit: fl, share: used / fl };
+    }),
     cost,
     tokens: rows.reduce((n, r) => n + r.input + r.cacheCreate + r.cacheRead + r.output, 0),
     share: limit > 0 ? cost / limit : undefined,
@@ -557,11 +593,12 @@ function transcriptFiles(root: string, since: number): string[] {
   return files.sort();
 }
 
-/** The last 7 days of one account by model. Reads transcripts touched in that window only, and keeps what it read per file until the file changes. */
+/** The week of one account by model: since the plan's last reset when `weekStart` is set, else the last 7 days. Reads transcripts touched in that window only, and keeps what it read per file until the file changes. */
 export async function accountWeek(account: Account, now = Date.now()): Promise<WeekTotal> {
   const models = new Map<string, WeekModel>();
   const seen = new Set<string>();
-  for (const file of transcriptFiles(account.root, now - WEEK_MS)) {
+  const since = lastReset(account.weekStart, now) ?? now - WEEK_MS;
+  for (const file of transcriptFiles(account.root, since)) {
     let stat: fs.Stats;
     try {
       stat = await fs.promises.stat(file);
@@ -573,9 +610,9 @@ export async function accountWeek(account: Account, now = Date.now()): Promise<W
       cached = { mtime: stat.mtimeMs, size: stat.size, entries: weekEntries(await readRecords(file).catch(() => [])) };
       weekFiles.set(file, cached);
     }
-    addWeek(models, seen, cached.entries, now - WEEK_MS, now);
+    addWeek(models, seen, cached.entries, since, now);
   }
-  return weekTotal(account, models, now);
+  return weekTotal(account, models, since, now);
 }
 
 /** Finds a session of the repo, or a headless child of one, by id, in any account. */

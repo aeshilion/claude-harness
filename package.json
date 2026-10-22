@@ -82,6 +82,12 @@
           "markdownDescription": "The plan of the Claude account in the global harness folder. The session cost then starts on that plan's weekly limit estimate. Empty means no plan.",
           "order": 4
         },
+        "claudeHarness.weekStart": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "When the weekly limit of the main account resets, as weekday and UTC hour, for example `Mon 11:00`. The weekly summary then counts since the last reset. Empty means a rolling 7 days.",
+          "order": 5
+        },
         "claudeHarness.accounts": {
           "type": "array",
           "items": {
@@ -100,13 +106,17 @@
                 "enum": ["", "pro", "max5", "max20", "team-standard", "team", "api"],
                 "enumItemLabels": ["Not set", "Pro", "Max 5x", "Max 20x", "Team Standard", "Team Premium", "API billing"],
                 "description": "The plan of this account."
+              },
+              "weekStart": {
+                "type": "string",
+                "description": "When the weekly limit of this account resets, as weekday and UTC hour, for example `Mon 11:00`. Empty means a rolling 7 days."
               }
             },
             "required": ["path"]
           },
           "default": [],
           "markdownDescription": "More Claude accounts on this machine, each with its own config folder, for example `~/.claude-work`. Sessions of every account are listed, labeled with the account. The global harness folder stays the main account, labeled Default.",
-          "order": 5
+          "order": 6
         }
       }
     },

@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let global: HarnessScope = globalScope(vscode.workspace.getConfiguration('claudeHarness').get<string>('root'));
   const accounts = (): Account[] => {
     const config = vscode.workspace.getConfiguration('claudeHarness');
-    return parseAccounts(global.root, config.get<string>('plan'), config.get<unknown>('accounts'));
+    return parseAccounts(global.root, config.get<string>('plan'), config.get<unknown>('accounts'), undefined, config.get<string>('weekStart'));
   };
   let scopes: HarnessScope[] = [global];
   let views: ScopeView[] = [];
@@ -471,7 +471,7 @@ export function activate(context: vscode.ExtensionContext): void {
         loadScopes();
         refresh();
       }
-      if (e.affectsConfiguration('claudeHarness.accounts') || e.affectsConfiguration('claudeHarness.plan')) refresh();
+      if (e.affectsConfiguration('claudeHarness.accounts') || e.affectsConfiguration('claudeHarness.plan') || e.affectsConfiguration('claudeHarness.weekStart')) refresh();
       if (!e.affectsConfiguration('claudeHarness.root')) return;
       global = globalScope(vscode.workspace.getConfiguration('claudeHarness').get<string>('root'));
       loadScopes();
