@@ -9,6 +9,18 @@ import { splitDescription } from './refs';
 import { sessionDesc, sessionIcon, showSession, showSessionsPage } from './sessions';
 import { groupHead, rowName } from './tables';
 
+// One toggle per list view in a category header: the grouping first, then each sort.
+const VIEW_MODES = {
+  source: ['list-tree', 'Group by source'],
+  loading: ['list-tree', 'Group by when it loads'],
+  event: ['list-tree', 'Group by event'],
+  marketplace: ['list-tree', 'Group by marketplace'],
+  name: ['case-sensitive', 'Sort by name'],
+  recent: ['history', 'Sort by last change'],
+  status: ['pulse', 'Sort by status'],
+  state: ['pass', 'Sort by enabled state'],
+};
+
 export function renderCategories(list, view, q, nested) {
   for (const cat of view.categories) {
     const lv = LIST_VIEWS[cat.kind];
@@ -43,18 +55,22 @@ export function renderCategories(list, view, q, nested) {
         el('span', { className: 'label' }, cat.label),
         lv && !collapsed && items.length > 1 && (groups.length > 1 || !isGrouped(cat.kind))
           ? el(
-              'select',
-              {
-                className: 'sort',
-                title: 'View',
-                onclick: e => e.stopPropagation(),
-                onchange: e => {
-                  state.listViews[cat.kind] = e.target.value;
+              'span',
+              { className: 'view-modes', role: 'group', 'aria-label': 'View' },
+              listModes(cat.kind).map(k => {
+                const on = listMode(cat.kind) === k;
+                const [glyph, title] = VIEW_MODES[k] || ['list-flat', k];
+                const b = iconBtn(glyph, title, e => {
+                  e.stopPropagation();
+                  state.listViews[cat.kind] = k;
                   persist();
                   render();
-                },
-              },
-              listModes(cat.kind).map(k => el('option', { value: k, selected: listMode(cat.kind) === k }, `View: ${k}`))
+                });
+                b.classList.add('toggle');
+                if (on) b.classList.add('active');
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                return b;
+              })
             )
           : null,
         cat.kind === 'mcp' && view.id === 'global'

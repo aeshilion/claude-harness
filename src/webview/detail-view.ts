@@ -1,6 +1,6 @@
 // View mode of the detail page: one harness element as a small dashboard in the session page's card language.
 // A summary card (what it is, where it comes from, what it says, its frontmatter as chips) and KPI tiles on what it
-// costs in context sit on top; below them one view at a time behind tabs: the document, tools, links, files.
+// costs in context sit on top; below them one view at a time behind tabs: the document, references, files, connections, tools.
 import type { Asset, ScopeView } from '../harness';
 import type { Detail } from '../shared/messages';
 import { AGENT_COLORS, command, kindLabel, labelOf, metaOf, openAt, persist, pluginOf, skillPluginOf, sourceName, state, viewOf, vscode } from './core';
@@ -154,10 +154,14 @@ function hero(a: Asset, v: ScopeView | undefined, draft: Draft | undefined, desc
 // A reference list: rows that hover-preview and open the element.
 const refList = (entries: Entry[], empty: string) => (entries.length ? el('div', { className: 'ref-list' }, entries.map(refRow)) : el('div', { className: 'dv-empty' }, empty));
 
+// A permission rule like `Bash(git:*)` reads as the tool and, muted, what it is limited to.
+const toolChip = (t: string) => {
+  const m = /^([^(]+)\((.*)\)$/.exec(t);
+  return el('span', { className: 'dv-tool' }, m ? [m[1], el('span', { className: 'dv-tool-arg' }, m[2])] : t);
+};
+
 // Tools grouped the way a reader thinks of them: Claude's own tools, then each MCP server's.
-function toolsCard(a: Asset, tools: string[], blocked: string[]): HTMLElement {
-  if (!tools.length && !blocked.length)
-    return card('Tools', 'all', el('div', { className: 'dv-empty' }, `Inherits every tool of the session${a.kind === 'agent' ? ' that starts it' : ''}.`));
+function toolGroups(tools: string[]): HTMLElement[] {
   const groups = new Map<string, string[]>();
   for (const t of tools) {
     const m = /^mcp__(.+?)__(.+)$/.exec(t);
@@ -180,15 +184,57 @@ function toolsCard(a: Asset, tools: string[], blocked: string[]): HTMLElement {
         server ? refChip(server, key) : el('span', {}, key || 'Claude Code'),
         el('span', { className: 'dv-count' }, String(names.length))
       ),
-      el('div', { className: 'dv-tool-chips' }, names.map(n => el('span', { className: 'dv-tool' }, n)))
+      el('div', { className: 'dv-tool-chips' }, names.map(toolChip))
     );
   };
   const order = [...groups.keys()].sort((x, y) => (x ? 1 : 0) - (y ? 1 : 0) || x.localeCompare(y));
+  return order.map(k => section(k, groups.get(k) as string[]));
+}
+
+function toolsCard(a: Asset, tools: string[], blocked: string[]): HTMLElement {
+  if (!tools.length && !blocked.length)
+    return card('Tools', 'all', el('div', { className: 'dv-empty' }, `Inherits every tool of the session${a.kind === 'agent' ? ' that starts it' : ''}.`));
   return card(
     'Tools',
     tools.length,
-    order.map(k => section(k, groups.get(k) as string[])),
+    toolGroups(tools),
     blocked.length ? el('div', { className: 'dv-tools blocked' }, el('div', { className: 'dv-tools-head' }, icon('circle-slash'), el('span', {}, 'Blocked'), el('span', { className: 'dv-count' }, String(blocked.length))), el('div', { className: 'dv-tool-chips' }, blocked.map(n => el('span', { className: 'dv-tool' }, n)))) : null
+  );
+}
+
+// Claude Code's own tools, counted when the text names one in a code span or as "the Read tool"; MCP tools by full name.
+const BUILTIN_TOOLS = 'Agent|AskUserQuestion|Bash|CronCreate|Edit|EnterPlanMode|EnterWorktree|ExitPlanMode|Glob|Grep|LSP|Monitor|MultiEdit|NotebookEdit|PowerShell|Read|SendMessage|Skill|Task|TaskStop|TodoWrite|ToolSearch|WebFetch|WebSearch|Workflow|Write';
+const NAMED_TOOL = new RegExp('`(' + BUILTIN_TOOLS + ')(?:\\([^`]*\\))?`|\\b(' + BUILTIN_TOOLS + ') tool\\b|\\b(mcp__[A-Za-z0-9_-]+?__[A-Za-z0-9_*-]+)', 'g');
+const namedTools = (body: string) => [...new Set([...body.matchAll(NAMED_TOOL)].map(m => m[1] || m[2] || m[3]))];
+
+// A skill's or command's allowed-tools only pre-approves: every other tool stays available under the permission
+// settings. So the tab shows that list beside the tools the instructions name, and the agent's tools when it runs forked.
+function allowedToolsCard(a: Asset, allowed: string[], named: string[], draft: Draft): HTMLElement {
+  const skill = a.kind === 'skill';
+  const fork = fieldOf(draft, 'context') === 'fork';
+  const agentName = String(fieldOf(draft, 'agent') ?? 'general-purpose');
+  const agent = resolve(agentName, a, 'agent');
+  const agentTools = agent ? metaOf(agent.a).tools || [] : [];
+  return el(
+    'div',
+    { className: 'dv-columns' },
+    card(
+      'Pre-approved',
+      allowed.length,
+      allowed.length
+        ? [el('p', { className: 'dv-note' }, `Run without a permission prompt while the ${skill ? 'skill is active' : 'command runs'}. Every other tool stays available under your permission settings.`), toolGroups(allowed)]
+        : el('div', { className: 'dv-empty' }, 'None. Claude asks before any tool your permission settings do not already allow.')
+    ),
+    card(skill ? 'Named in SKILL.md' : 'Named in the prompt', named.length, named.length ? toolGroups(named) : el('div', { className: 'dv-empty' }, `The ${skill ? 'instructions name' : 'prompt names'} no tool.`)),
+    fork
+      ? card(
+          'Runs in',
+          null,
+          el('div', { className: 'dv-tools-head' }, icon('hubot'), agent ? refChip(agent) : el('span', {}, agentName)),
+          el('p', { className: 'dv-note' }, !agent ? 'A forked subagent of this built-in type, with its own tool set.' : agentTools.length ? "A forked subagent, limited to this agent's tools:" : 'A forked subagent that inherits every tool of the session.'),
+          agentTools.length ? toolGroups(agentTools) : null
+        )
+      : null
   );
 }
 
@@ -203,9 +249,12 @@ const FILE_ICONS: [RegExp, string][] = [
 const fileChip = (a: Asset, rel: string) =>
   el('button', { type: 'button', className: 'ref ref-file', title: `Open ${rel}`, onclick: () => command('openFile', { id: a.id, rel }) }, icon((FILE_ICONS.find(([re]) => re.test(rel)) || [null, 'file'])[1] as string), el('span', {}, rel));
 
+// Markdown beside SKILL.md that Claude reads when the instructions send it there; templates, assets, examples and
+// evals are plain files.
+const isReference = (f: string) => f !== 'SKILL.md' && /\.md$/i.test(f) && !/^(templates|assets|examples|evals?)\//i.test(f);
+
 // A skill's files under one collapsible header per top folder; a click opens the file.
-function filesCard(a: Asset): HTMLElement | null {
-  const files = (a.files || []).filter(f => f !== 'SKILL.md');
+function filesCard(a: Asset, title: string, files: string[]): HTMLElement | null {
   if (!files.length) return null;
   const groups = new Map<string, string[]>();
   for (const f of files) {
@@ -216,12 +265,12 @@ function filesCard(a: Asset): HTMLElement | null {
   const row = (f: string, top: string) =>
     el('button', { type: 'button', className: 'dv-file', title: f, onclick: () => command('openFile', { id: a.id, rel: f }) }, icon((FILE_ICONS.find(([re]) => re.test(f)) || [null, 'file'])[1] as string), el('span', {}, top ? f.slice(top.length + 1) : f));
   return card(
-    'Files',
+    title,
     files.length,
     order.map(top => {
       const list = groups.get(top) as string[];
       if (!top || order.length === 1) return list.map(f => row(f, order.length === 1 ? top : ''));
-      const key = `files|${a.id}|${top}`;
+      const key = `${title.toLowerCase()}|${a.id}|${top}`;
       const folded = state.foldedGroups.has(key);
       return [groupHead('origin-label dv-folder', key, folded, 'folder', top, list.length, renderMain), folded ? null : list.map(f => row(f, top))];
     })
@@ -319,37 +368,37 @@ export function setMode(mode: 'view' | 'edit') {
 function kpisFor(a: Asset, draft: Draft, description: string, mentions: Entry[], mentioned: Entry[], tools: string[]): HTMLElement {
   const body = draft.body;
   const desc = `${fmtTokens(tokens(description))} tokens`;
-  const links = tile(String(mentions.length + mentioned.length), 'Links', 'references', `${mentions.length} out · ${mentioned.length} in`);
+  const connections = tile(String(mentions.length + mentioned.length), 'Connections', 'references', `refers to ${mentions.length} · referred to by ${mentioned.length}`);
   const toolTile = tile(tools.length ? String(tools.length) : 'All', 'Tools', 'tools', tools.length ? `${tools.filter(t => t.startsWith('mcp__')).length} from MCP servers` : 'no tools list: inherits all');
   const always = metaOf(a).paths ? false : true;
   const set: Record<string, HTMLElement[]> = {
     skill: [
       tile(desc.replace(' tokens', ''), 'Always loaded', 'layers', 'tokens: the description, in every session'),
       tile(fmtTokens(tokens(body)), 'On use', 'play', 'tokens: SKILL.md when the skill runs'),
-      tile(String(Math.max(1, (a.files || []).length)), 'Files', 'files', `${(a.files || []).filter(f => f.startsWith('references/')).length} references · ${(a.files || []).filter(f => /^scripts\//.test(f)).length} scripts`),
-      links,
+      tile(String(Math.max(1, (a.files || []).length)), 'Files', 'files', `${(a.files || []).filter(isReference).length} references · ${(a.files || []).filter(f => /^scripts\//.test(f)).length} scripts`),
+      connections,
     ],
-    agent: [tile(desc.replace(' tokens', ''), 'Always loaded', 'layers', 'tokens: the description, in the agent list'), tile(fmtTokens(tokens(body)), 'System prompt', 'hubot', 'tokens, when the agent starts'), toolTile, links],
-    command: [tile(desc.replace(' tokens', ''), 'Always loaded', 'layers', 'tokens: the description'), tile(fmtTokens(tokens(body)), 'On use', 'play', `tokens, when you run /${a.name}`), toolTile, links],
+    agent: [tile(desc.replace(' tokens', ''), 'Always loaded', 'layers', 'tokens: the description, in the agent list'), tile(fmtTokens(tokens(body)), 'System prompt', 'hubot', 'tokens, when the agent starts'), toolTile, connections],
+    command: [tile(desc.replace(' tokens', ''), 'Always loaded', 'layers', 'tokens: the description'), tile(fmtTokens(tokens(body)), 'On use', 'play', `tokens, when you run /${a.name}`), tile(String(tools.length), 'Pre-approved', 'tools', 'tools that run without asking'), connections],
     rule: [
       tile(always ? 'Always' : 'On match', 'Loads', 'law', always ? 'in every session' : 'when Claude reads a matching file'),
       tile(fmtTokens(tokens(body)), 'Size', 'symbol-ruler', 'tokens'),
       tile(String((metaOf(a).paths || []).length), 'Paths', 'filter', 'globs in the frontmatter'),
-      links,
+      connections,
     ],
     memory: [
       tile(fmtTokens(tokens(body)), 'Always loaded', 'layers', 'tokens, in every session here'),
       tile(String(lines(body)), 'Lines', 'list-flat', `${words(body)} words`),
       tile(String((body.match(/^@\S+/gm) || []).length), 'Imports', 'references', '@-lines that pull in more files'),
-      links,
+      connections,
     ],
     outputStyle: [
       tile(fmtTokens(tokens(body)), 'Size', 'symbol-ruler', 'tokens, replacing the default style'),
       tile(fieldOf(draft, 'keep-coding-instructions') === true ? 'Kept' : 'Replaced', 'Coding instructions', 'code', 'of the default system prompt'),
-      links,
+      connections,
     ],
   };
-  return el('div', { className: 'kpis' }, set[a.kind] || [links]);
+  return el('div', { className: 'kpis' }, set[a.kind] || [connections]);
 }
 
 function markdownView(d: Detail, draft: Draft): Child[] {
@@ -372,8 +421,13 @@ function markdownView(d: Detail, draft: Draft): Child[] {
   });
   const skills = listField(fieldOf(draft, 'skills'));
   const outline = outlineCard(headings);
-  const others = (a.files || []).filter(f => f !== 'SKILL.md');
+  const references = (a.files || []).filter(isReference);
+  const plain = (a.files || []).filter(f => f !== 'SKILL.md' && !isReference(f));
   const paths = metaOf(a).paths || [];
+  const toolsTab = { id: 'tools', label: 'Tools', glyph: 'tools', about: 'The tools it may use: Claude Code\'s own, then each MCP server\'s.', count: tools.length || 'all', body: () => toolsCard(a, tools, blocked) };
+  const named = namedTools(draft.body);
+  const allowedCount = new Set([...tools.map(t => t.replace(/\(.*$/, '')), ...named]).size;
+  const allowedToolsTab = { id: 'tools', label: 'Tools', glyph: 'tools', about: 'The tools it runs without asking, and the ones its instructions name.', count: allowedCount || undefined, body: () => allowedToolsCard(a, tools, named, draft) };
   return [
     hero(a, v, draft, description),
     kpisFor(a, draft, description, mentions, mentioned, tools),
@@ -385,9 +439,11 @@ function markdownView(d: Detail, draft: Draft): Child[] {
         about: DOC_ABOUT[a.kind] || 'The file as Claude reads it.',
         body: () => (outline ? el('div', { className: 'dv-grid' }, el('div', { className: 'dv-main' }, docCard(a, draft.body, doc)), el('aside', { className: 'dv-side' }, outline)) : docCard(a, draft.body, doc)),
       },
-      ['agent', 'skill', 'command'].includes(a.kind)
-        ? { id: 'tools', label: 'Tools', glyph: 'tools', about: 'The tools it may use: Claude Code\'s own, then each MCP server\'s.', count: tools.length || 'all', body: () => toolsCard(a, tools, blocked) }
+      a.kind === 'skill' && references.length
+        ? { id: 'references', label: 'References', glyph: 'library', about: 'The markdown files beside SKILL.md that Claude reads when the instructions send it there.', count: references.length, body: () => filesCard(a, 'References', references) }
         : null,
+      a.kind === 'skill' && plain.length ? { id: 'files', label: 'Files', glyph: 'files', about: 'The scripts, templates and other files beside SKILL.md.', count: plain.length, body: () => filesCard(a, 'Files', plain) } : null,
+      a.kind === 'agent' ? toolsTab : a.kind === 'command' ? allowedToolsTab : null,
       skills.length
         ? {
             id: 'skills',
@@ -412,8 +468,8 @@ function markdownView(d: Detail, draft: Draft): Child[] {
         : null,
       a.kind === 'rule' ? { id: 'paths', label: 'Paths', glyph: 'filter', about: 'The globs that load the rule, and the files each one matches.', count: paths.length, body: () => card('Paths', null, renderRuleInfo(a, false)) } : null,
       {
-        id: 'links',
-        label: 'Links',
+        id: 'connections',
+        label: 'Connections',
         glyph: 'references',
         about: 'The skills, agents and commands it names, and the ones that name it.',
         count: mentions.length + mentioned.length,
@@ -421,11 +477,11 @@ function markdownView(d: Detail, draft: Draft): Child[] {
           el(
             'div',
             { className: 'dv-columns' },
-            card('Mentions', mentions.length, refList(mentions, 'Names no other skill, agent or command.')),
-            card('Mentioned by', mentioned.length, refList(mentioned, 'Nothing in the harness names it.'))
+            card('Refers to', mentions.length, refList(mentions, 'Names no other skill, agent or command.')),
+            card('Referred to by', mentioned.length, refList(mentioned, 'Nothing in the harness names it.'))
           ),
       },
-      a.kind === 'skill' && others.length ? { id: 'files', label: 'Files', glyph: 'files', about: 'The references, scripts and other files beside SKILL.md.', count: others.length, body: () => filesCard(a) } : null,
+      a.kind === 'skill' ? allowedToolsTab : null,
     ]),
   ];
 }

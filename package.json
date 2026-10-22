@@ -2,7 +2,7 @@
   "name": "claude-harness",
   "displayName": "Claude Harness",
   "description": "Visualize and edit your Claude Code harness in VS Code: memory, rules, agents, skills, commands, output styles, workflows, hooks, MCP servers and plugins, globally and per repository.",
-  "version": "0.2.33",
+  "version": "0.2.35",
   "publisher": "integrations-at",
   "license": "CC-BY-NC-SA-4.0",
   "icon": "media/icon.png",
@@ -76,8 +76,24 @@
         },
         "claudeHarness.plan": {
           "type": "string",
-          "enum": ["", "pro", "max5", "max20", "team-standard", "team", "api"],
-          "enumItemLabels": ["Not set", "Pro", "Max 5x", "Max 20x", "Team Standard", "Team Premium", "API billing"],
+          "enum": [
+            "",
+            "pro",
+            "max5",
+            "max20",
+            "team-standard",
+            "team",
+            "api"
+          ],
+          "enumItemLabels": [
+            "Not set",
+            "Pro",
+            "Max 5x",
+            "Max 20x",
+            "Team Standard",
+            "Team Premium",
+            "API billing"
+          ],
           "default": "",
           "markdownDescription": "The plan of the Claude account in the global harness folder. The session cost then starts on that plan's weekly limit estimate. Empty means no plan.",
           "order": 4
@@ -103,8 +119,24 @@
               },
               "plan": {
                 "type": "string",
-                "enum": ["", "pro", "max5", "max20", "team-standard", "team", "api"],
-                "enumItemLabels": ["Not set", "Pro", "Max 5x", "Max 20x", "Team Standard", "Team Premium", "API billing"],
+                "enum": [
+                  "",
+                  "pro",
+                  "max5",
+                  "max20",
+                  "team-standard",
+                  "team",
+                  "api"
+                ],
+                "enumItemLabels": [
+                  "Not set",
+                  "Pro",
+                  "Max 5x",
+                  "Max 20x",
+                  "Team Standard",
+                  "Team Premium",
+                  "API billing"
+                ],
                 "description": "The plan of this account."
               },
               "weekStart": {
@@ -112,7 +144,9 @@
                 "description": "When the weekly limit of this account resets, as weekday and UTC hour, for example `Mon 11:00`. Empty means a rolling 7 days."
               }
             },
-            "required": ["path"]
+            "required": [
+              "path"
+            ]
           },
           "default": [],
           "markdownDescription": "More Claude accounts on this machine, each with its own config folder, for example `~/.claude-work`. Sessions of every account are listed, labeled with the account. The global harness folder stays the main account, labeled Default.",
