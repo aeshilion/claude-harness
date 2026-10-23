@@ -61,7 +61,7 @@ git remote add upstream https://github.com/alexander-kastil/claude-harness.git
 
 ### 3. Synchronize master
 
-`/ext-contribute-start <name>` runs steps 3 and 4:
+Run `/ext-contribute-start <name>`. It covers steps 3 and 4 and runs:
 
 ```bash
 git checkout master
@@ -71,13 +71,22 @@ git push origin master
 
 ### 4. Create a feature branch
 
+`/ext-contribute-start <name>` then branches off:
+
 ```bash
 git checkout -b feature/<name>
 ```
 
 ### 5. Implement, commit and test
 
-The work and the commits are yours; no command writes or commits code.
+Run `/ext-sideload` to try your change in your VS Code, or `/ext-sideload --new` to try it in a separate VS Code instance that opens the repo. It runs:
+
+```bash
+npm run package
+code --install-extension claude-harness-<version>.vsix --force
+```
+
+The work and the commits are yours; no command writes or commits code. Check them with:
 
 ```bash
 npm ci
@@ -85,11 +94,9 @@ npm run compile
 npm test
 ```
 
-To try the change in VS Code, `/ext-sideload` packages it and installs it in your VS Code. `/ext-sideload --new` installs it in a separate VS Code instance instead and opens the repo there.
-
 ### 6. Merge upstream master before the pull request
 
-This is the step that avoids conflicts. `/ext-contribute-sync` runs it and stops on a conflict or a failing test:
+Run `/ext-contribute-sync`. This is the step that avoids conflicts; it stops on a conflict or a failing test and runs:
 
 ```bash
 git fetch upstream
@@ -102,7 +109,7 @@ git push -u origin HEAD
 
 ### 7. Open the pull request
 
-`/ext-contribute-pr` runs the sync first, then opens the PR with "Allow edits by maintainers" on. The title and description come from your commits.
+Run `/ext-contribute-pr`. It runs the sync first, then opens the PR with "Allow edits by maintainers" on, titled and described from your commits:
 
 ```bash
 gh pr create --repo alexander-kastil/claude-harness --base master --head aeshilion:feature/<name> --title "<title>" --body-file <file>
@@ -110,11 +117,11 @@ gh pr create --repo alexander-kastil/claude-harness --base master --head aeshili
 
 ### 8. Keep the pull request up to date
 
-Repeat step 6 with `/ext-contribute-sync`. The PR updates itself.
+Run `/ext-contribute-sync` again. It repeats step 6, and the PR updates itself.
 
 ### 9. Clean up after the merge
 
-`/ext-contribute-finish` checks that the PR merged before it deletes anything:
+Run `/ext-contribute-finish`. It checks that the PR merged before it deletes anything, then runs:
 
 ```bash
 git checkout master
