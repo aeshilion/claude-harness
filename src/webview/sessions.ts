@@ -3,7 +3,7 @@
 import { select, showRepo, state, viewOf, vscode } from './core';
 import { el, fmtDate, fmtDur, fmtNum, highlight, icon, iconBtn, pageHead, shortModel } from './dom';
 import { render, renderMain } from './main';
-import { BILLING, TEAM_PLANS, fmtShare, fmtUsd } from './session-page';
+import { BILLING, fmtShare, fmtUsd } from './session-page';
 import { gridTable } from './tables';
 
 export const sessionDesc = s =>
@@ -250,17 +250,16 @@ export function renderSessionsPage() {
     week.replaceChildren(
       ...totals.map(t => {
         const plan = BILLING.find(b => b[0] === t.plan);
-        const head = [t.account, plan ? plan[1] : '', fmtNum(t.tokens) + ' tokens', t.limit ? `${fmtShare(t.cost, t.limit)} of the weekly limit*` : fmtUsd(t.cost)].filter(Boolean).join(' · ');
+        const head = [t.account, plan ? plan[1] : '', fmtNum(t.tokens) + ' tokens', t.limit ? `${fmtShare(t.cost, t.limit)} of the weekly limit` : fmtUsd(t.cost)].filter(Boolean).join(' · ');
         const span = t.fromReset ? `Since ${fmtDate(t.since)}` : 'Last 7 days';
-        const limitNote = t.limit ? ' * Not exact prices: the limit of a plan is an estimate, from one measurement for Team Premium.' : '';
         return el(
           'div',
           { className: 'recent' },
-          el('div', { className: 'group-label', title: `${span}, all repos and their agents, at Anthropic API list prices.${limitNote}${TEAM_PLANS.has(t.plan) ? ' Team plans expose no rate limits to Claude Code, so the share is an estimate.' : ''}` }, `${span} · ${head}`),
+          el('div', { className: 'group-label', title: `${span}, all repos and agents, at API list prices.${t.limit ? ' The limit is an estimate.' : ''}` }, `${span} · ${head}`),
           t.models.length
             ? t.models.map(m => el('div', { className: 'row' }, icon('chip'), el('span', { className: 'name' }, shortModel(m.model)), el('span', { className: 'desc' }, [`${fmtNum(m.input + m.cacheCreate + m.cacheRead + m.output)} tokens`, t.limit ? `${fmtShare(m.cost, t.limit)} of limit` : fmtUsd(m.cost), `${m.messages} replies`].join(' · '))))
             : el('div', { className: 'empty flush' }, 'No usage in this window.'),
-          (t.families || []).map(x => el('div', { className: 'row', title: `The ${x.family} weekly limit of this plan, about $${x.limit} at API list prices: an estimate from one measurement.` }, icon('dashboard'), el('span', { className: 'name' }, `${x.family[0].toUpperCase()}${x.family.slice(1)} limit`), el('span', { className: 'desc' }, `${fmtShare(x.cost, x.limit)} of its own limit*`)))
+          (t.families || []).map(x => el('div', { className: 'row' }, icon('dashboard'), el('span', { className: 'name' }, `${x.family[0].toUpperCase()}${x.family.slice(1)} limit`), el('span', { className: 'desc' }, `${fmtShare(x.cost, x.limit)} of its own limit`)))
         );
       })
     );
