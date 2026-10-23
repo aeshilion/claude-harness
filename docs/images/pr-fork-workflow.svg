@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1378" viewBox="0 0 2560 1378" role="img" aria-labelledby="t d">
 <title id="t">From your fork to a pull request that merges cleanly</title>
-<desc id="d">How to contribute to alexander-kastil/claude-harness from the fork aeshilion/claude-harness. Three lanes, top to bottom: the upstream repo on GitHub, the fork on GitHub (origin), and the local clone on your machine. The animation plays steps 1 to 9 in order and shows the commits moving between the lanes. Step 6, merging upstream master into the feature branch right before the pull request, is the step that avoids conflicts. Step 8 loops back to it while the pull request is open. A fourth row names the Claude Code command that runs each step: /ext-contribute-setup for steps 1 and 2, start for 3 and 4, /ext-sideload to try step 5 in VS Code, sync for 6 and 8, pr for 7 and finish for 9.</desc>
+<desc id="d">How to contribute to alexander-kastil/claude-harness from the fork aeshilion/claude-harness. Three lanes, top to bottom: the upstream repo on GitHub, the fork on GitHub (origin), and the local clone on your machine. The animation plays steps 1 to 9 in order and shows the commits moving between the lanes. Step 6, merging upstream master into the feature branch right before the pull request, is the step that avoids conflicts. Step 8 loops back to it while the pull request is open. A fourth row names the Claude Code command that runs each step: /ext-contribute-setup for step 2, start for 3 and 4, /ext-sideload to try step 5 in VS Code, sync for 6 and 8, pr for 7 and finish for 9.</desc>
 <style>
   svg { font-family: 'Inter','Inter var',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; font-size: 26px; }
   .mono { font-family: ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,monospace; }
@@ -278,17 +278,15 @@
 <path d="M2220,374 C2220,318 1750,318 1750,352.5" pathLength="100" stroke-dasharray="100 100" fill="none" stroke="#B8912F" stroke-width="4" style="animation:k97 34s linear infinite"/>
 <polygon points="1750,371 1740,349 1760,349" fill="#B8912F" style="animation:k98 34s linear infinite"/>
 <text x="1985" y="308" class="labgold" text-anchor="middle" style="animation:k99 34s linear infinite">repeat 6</text>
-<path d="M798,1218 V1226 H990 V1218" fill="none" stroke="#D8D3C9" stroke-width="2"/>
 <path d="M1160,1218 V1226 H1350 V1218" fill="none" stroke="#D8D3C9" stroke-width="2"/>
-<text x="894" y="1200" class="branch mono" text-anchor="middle">setup</text>
+<text x="990" y="1200" class="branch mono" text-anchor="middle">setup</text>
 <text x="1255" y="1200" class="branch mono" text-anchor="middle">start</text>
 <text x="1545" y="1200" class="branch mono" text-anchor="middle">/ext-sideload</text>
 <text x="1750" y="1200" class="branch mono" text-anchor="middle">sync</text>
 <text x="2010" y="1200" class="branch mono" text-anchor="middle">pr</text>
 <text x="2220" y="1200" class="branch mono" text-anchor="middle">sync</text>
 <text x="2370" y="1200" class="branch mono" text-anchor="middle">finish</text>
-<text x="894" y="1200" class="branch mono ov" text-anchor="middle" style="fill:#B8912F;animation:k88 34s linear infinite">setup</text>
-<text x="894" y="1200" class="branch mono ov" text-anchor="middle" style="fill:#B8912F;animation:k89 34s linear infinite">setup</text>
+<text x="990" y="1200" class="branch mono ov" text-anchor="middle" style="fill:#B8912F;animation:k89 34s linear infinite">setup</text>
 <text x="1255" y="1200" class="branch mono ov" text-anchor="middle" style="fill:#B8912F;animation:k90 34s linear infinite">start</text>
 <text x="1255" y="1200" class="branch mono ov" text-anchor="middle" style="fill:#B8912F;animation:k91 34s linear infinite">start</text>
 <text x="1545" y="1200" class="branch mono ov" text-anchor="middle" style="fill:#B8912F;animation:k92 34s linear infinite">/ext-sideload</text>
