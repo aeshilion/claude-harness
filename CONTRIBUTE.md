@@ -16,6 +16,7 @@ Once you have cloned your fork, the repo's Claude Code commands run the remainin
 | `/ext-contribute-sync` | 6, 8 | Merges the owner's master, tests and pushes |
 | `/ext-contribute-pr` | 7 | Syncs, then opens the pull request |
 | `/ext-contribute-finish` | 9 | Cleans up after the merge |
+| `/ext-contribute-cleanup [branch]` | - | Deletes a feature branch you no longer need |
 
 ### Before you start: GitHub CLI
 
@@ -127,5 +128,15 @@ Run `/ext-contribute-finish`. It checks that the PR merged before it deletes any
 git checkout master
 git pull --ff-only upstream master
 git branch -d feature/<name>
+git push origin --delete feature/<name>
+```
+
+### Clean up an unused feature branch
+
+Run `/ext-contribute-cleanup <name>` for a branch you no longer need. It refuses while the branch has an open pull request, then runs:
+
+```bash
+git checkout master
+git branch -D feature/<name>
 git push origin --delete feature/<name>
 ```
